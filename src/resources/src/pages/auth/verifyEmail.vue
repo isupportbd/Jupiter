@@ -1,20 +1,14 @@
 <template>
   <div class="container position-absolute start-50 top-50 translate-middle">
     <div class="auth col-12 col-sm-9 col-md-7 col-lg-5 col-xl-4 mx-auto py-5">
-      <div class="card card-body border-0">
+      <div class="card card-body border-0 shadow-lg" style="background: #131926; border-radius: 12px;">
         <div class="d-block mb-2 text-center">
-          <img src="@/assets/images/logo.png" alt="nexgen" style="max-height: 60px;" />
+          <img src="@/assets/images/logo.png" alt="Jupiter" style="max-height: 60px;" />
         </div>
-        <h4 class="text-center">Email Verification</h4>
-        <p
-          v-if="message"
-          class="text-center alert py-2 mt-2"
-          :class="isError ? 'alert-danger text-danger' : 'alert-success text-success'">
-          {{ message }}
-        </p>
-        <div class="text-center mt-2">
-          <router-link to="/login">
-            <span>Back to login</span>
+        <h4 class="text-center text-white">Email Verification</h4>
+        <div class="text-center mt-3">
+          <router-link to="/login" class="btn btn-primary px-4">
+            <span>Back to Sign In</span>
           </router-link>
         </div>
       </div>
@@ -24,25 +18,24 @@
 
 <script setup lang="ts">
 import { useHead } from "@vueuse/head";
-import { ref } from "vue";
-import { useRoute } from "vue-router";
+import { useRoute, useRouter } from "vue-router";
 import { useGum } from "@/plugins/gum";
+import { useToast } from "@/composables/useToast";
 
-useHead({ title: "Verify Email" });
+useHead({ title: "Verify Email - Jupiter" });
 
 const route = useRoute();
+const router = useRouter();
+const toast = useToast();
 
 const email = String(route.query.email || "").trim();
 const token = String(route.query.token || "").trim();
-const message = ref("Verifying your email...");
-const isError = ref(false);
 
 const { post } = useGum();
 
 const verify = async () => {
   if (!email || !token) {
-    isError.value = true;
-    message.value = "Invalid verification link. Please request a new one.";
+    toast.error("Invalid verification link. Please request a new one.");
     return;
   }
 
@@ -51,12 +44,11 @@ const verify = async () => {
     { email, token },
     {
       onSuccess: () => {
-        isError.value = false;
-        message.value = "Email verified successfully. You can now login.";
+        toast.success("Email verified successfully. You can now login.");
+        setTimeout(() => router.push("/login"), 1000);
       },
       onError: (_errors, error) => {
-        isError.value = true;
-        message.value = error instanceof Error ? error.message : "Failed to verify email";
+        toast.error(error instanceof Error ? error.message : "Failed to verify email");
       }
     }
   );

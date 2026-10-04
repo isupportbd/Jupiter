@@ -26,19 +26,6 @@
           <div class="form-badge">{{ isOtpStep ? 'Reset Password' : 'Forgot Password' }}</div>
         </div>
 
-        <!-- Alert Message -->
-        <div v-if="errorMessage" class="auth-alert alert-error">
-          <i class="bi bi-exclamation-triangle-fill flex-shrink-0"></i>
-          <span>{{ errorMessage }}</span>
-          <button type="button" class="alert-close" @click="errorMessage = ''">&times;</button>
-        </div>
-
-        <div v-if="successMessage" class="auth-alert alert-success">
-          <i class="bi bi-check-circle-fill flex-shrink-0"></i>
-          <span>{{ successMessage }}</span>
-          <button type="button" class="alert-close" @click="successMessage = ''">&times;</button>
-        </div>
-
         <!-- ========================================== -->
         <!-- STEP 1: REQUEST OTP VIA EMAIL              -->
         <!-- ========================================== -->
@@ -187,11 +174,13 @@ import { useHead } from "@vueuse/head";
 import { ref, computed, onUnmounted, nextTick } from "vue";
 import { useRouter } from "vue-router";
 import { useAuthStore } from "@/stores/auth";
+import { useToast } from "@/composables/useToast";
 
 useHead({ title: "Forgot Password - Jupiter" });
 
 const router = useRouter();
 const auth = useAuthStore();
+const toast = useToast();
 
 const email = ref("");
 const otpCode = ref("");
@@ -202,8 +191,6 @@ const showPasswordConfirm = ref(false);
 
 const isOtpStep = ref(false);
 const loading = ref(false);
-const errorMessage = ref("");
-const successMessage = ref("");
 
 const otpInputRef = ref<HTMLInputElement | null>(null);
 
@@ -228,7 +215,7 @@ function startCountdown() {
       secondsRemaining.value--;
     } else {
       stopCountdown();
-      errorMessage.value = "OTP has expired. Please request a new code.";
+      toast.error("OTP has expired. Please request a new code.");
     }
   }, 1000);
 }
@@ -259,14 +246,12 @@ onUnmounted(() => {
 });
 
 async function onForgotSubmit() {
-  errorMessage.value = "";
-  successMessage.value = "";
   loading.value = true;
 
   try {
     const res = await auth.forgotPassword(email.value.trim());
     isOtpStep.value = true;
-    successMessage.value = res || "A 6-digit reset code has been sent to your email.";
+    toast.success(res || "A 6-digit reset code has been sent to your email.");
     startCountdown();
     startResendCooldown();
 
@@ -274,7 +259,7 @@ async function onForgotSubmit() {
       otpInputRef.value?.focus();
     });
   } catch (err: any) {
-    errorMessage.value = err.message || "Failed to process request.";
+    toast.error(err.message || "Failed to process request.");
   } finally {
     loading.value = false;
   }
@@ -282,34 +267,29 @@ async function onForgotSubmit() {
 
 async function onResendOtp() {
   if (resendCooldown.value > 0 || loading.value) return;
-  errorMessage.value = "";
-  successMessage.value = "";
   loading.value = true;
 
   try {
     const res = await auth.forgotPassword(email.value.trim());
-    successMessage.value = res || "A fresh reset code has been sent to your email.";
+    toast.success(res || "A fresh reset code has been sent to your email.");
     otpCode.value = "";
     startCountdown();
     startResendCooldown();
   } catch (err: any) {
-    errorMessage.value = err.message || "Failed to resend code.";
+    toast.error(err.message || "Failed to resend code.");
   } finally {
     loading.value = false;
   }
 }
 
 async function onResetSubmit() {
-  errorMessage.value = "";
-  successMessage.value = "";
-
   if (otpCode.value.length !== 6) {
-    errorMessage.value = "Please enter the complete 6-digit code.";
+    toast.error("Please enter the complete 6-digit code.");
     return;
   }
 
   if (newPassword.value !== confirmPassword.value) {
-    errorMessage.value = "Passwords do not match.";
+    toast.error("Passwords do not match.");
     return;
   }
 
@@ -324,12 +304,12 @@ async function onResetSubmit() {
     });
 
     stopCountdown();
-    successMessage.value = "Password successfully reset! Redirecting to login...";
+    toast.success("Password successfully reset! Redirecting to login...");
     setTimeout(() => {
       router.push("/login");
-    }, 1500);
+    }, 1000);
   } catch (err: any) {
-    errorMessage.value = err.message || "Invalid or expired OTP code.";
+    toast.error(err.message || "Invalid or expired OTP code.");
   } finally {
     loading.value = false;
   }
@@ -557,36 +537,4 @@ async function onResetSubmit() {
   color: #38bdf8;
 }
 
-.auth-alert {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 0.65rem 0.9rem;
-  border-radius: 10px;
-  font-size: 0.82rem;
-  margin-bottom: 1.1rem;
-}
-
-.alert-error {
-  background: rgba(239, 68, 68, 0.15);
-  border: 1px solid rgba(239, 68, 68, 0.3);
-  color: #fca5a5;
-}
-
-.alert-success {
-  background: rgba(34, 197, 94, 0.15);
-  border: 1px solid rgba(34, 197, 94, 0.3);
-  color: #86efac;
-}
-
-.alert-close {
-  margin-left: auto;
-  background: none;
-  border: none;
-  color: currentColor;
-  font-size: 1.2rem;
-  line-height: 1;
-  cursor: pointer;
-  padding: 0 4px;
-}
 </style>

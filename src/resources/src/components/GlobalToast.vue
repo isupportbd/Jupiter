@@ -49,16 +49,22 @@ const { toasts, remove } = useToast();
 </script>
 
 <style scoped>
+.toast {
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1) !important;
+}
+
 .toast-slide-enter-active,
 .toast-slide-leave-active {
-  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1) !important;
 }
+
 .toast-slide-enter-from {
-  opacity: 0;
-  transform: translateY(-20px) scale(0.95);
+  opacity: 0 !important;
+  transform: translateY(-15px) scale(0.96) !important;
 }
+
 .toast-slide-leave-to {
-  opacity: 0;
-  transform: translateX(40px) scale(0.95);
+  opacity: 0 !important;
+  transform: translateX(30px) scale(0.96) !important;
 }
 </style>

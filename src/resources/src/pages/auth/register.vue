@@ -30,19 +30,6 @@
           </div>
         </div>
 
-        <!-- Alert Message -->
-        <div v-if="errorMessage" class="auth-alert alert-error">
-          <i class="bi bi-exclamation-triangle-fill flex-shrink-0"></i>
-          <span>{{ errorMessage }}</span>
-          <button type="button" class="alert-close" @click="errorMessage = ''">&times;</button>
-        </div>
-
-        <div v-if="successMessage && currentStep !== 3" class="auth-alert alert-success">
-          <i class="bi bi-check-circle-fill flex-shrink-0"></i>
-          <span>{{ successMessage }}</span>
-          <button type="button" class="alert-close" @click="successMessage = ''">&times;</button>
-        </div>
-
         <!-- ========================================== -->
         <!-- STEP 3: PENDING APPROVAL CONFIRMATION       -->
         <!-- ========================================== -->
@@ -226,10 +213,12 @@
 import { useHead } from "@vueuse/head";
 import { ref, computed, onUnmounted, nextTick } from "vue";
 import { useAuthStore } from "@/stores/auth";
+import { useToast } from "@/composables/useToast";
 
 useHead({ title: "Create Account - Jupiter" });
 
 const auth = useAuthStore();
+const toast = useToast();
 
 const name = ref("");
 const email = ref("");
@@ -241,8 +230,6 @@ const showPasswordConfirm = ref(false);
 const currentStep = ref(1); // 1 = Form, 2 = OTP, 3 = Pending
 const otpCode = ref("");
 const loading = ref(false);
-const errorMessage = ref("");
-const successMessage = ref("");
 
 const otpInputRef = ref<HTMLInputElement | null>(null);
 
@@ -267,7 +254,7 @@ function startCountdown() {
       secondsRemaining.value--;
     } else {
       stopCountdown();
-      errorMessage.value = "Verification code has expired. Please request a new code.";
+      toast.error("Verification code has expired. Please request a new code.");
     }
   }, 1000);
 }
@@ -298,11 +285,8 @@ onUnmounted(() => {
 });
 
 async function onRegisterSubmit() {
-  errorMessage.value = "";
-  successMessage.value = "";
-
   if (password.value !== passwordConfirmation.value) {
-    errorMessage.value = "Password confirmation does not match.";
+    toast.error("Password confirmation does not match.");
     return;
   }
 
@@ -318,7 +302,7 @@ async function onRegisterSubmit() {
 
     currentStep.value = 2;
     otpCode.value = "";
-    successMessage.value = res.message || "A 6-digit verification code has been sent to your email.";
+    toast.success(res.message || "A 6-digit verification code has been sent to your email.");
     startCountdown();
     startResendCooldown();
 
@@ -326,7 +310,7 @@ async function onRegisterSubmit() {
       otpInputRef.value?.focus();
     });
   } catch (err: any) {
-    errorMessage.value = err.message || "Failed to initiate registration.";
+    toast.error(err.message || "Failed to initiate registration.");
   } finally {
     loading.value = false;
   }
@@ -334,12 +318,10 @@ async function onRegisterSubmit() {
 
 async function onVerifyOtpSubmit() {
   if (otpCode.value.length !== 6) {
-    errorMessage.value = "Please enter the complete 6-digit code.";
+    toast.error("Please enter the complete 6-digit code.");
     return;
   }
 
-  errorMessage.value = "";
-  successMessage.value = "";
   loading.value = true;
 
   try {
@@ -350,9 +332,9 @@ async function onVerifyOtpSubmit() {
 
     stopCountdown();
     currentStep.value = 3;
-    successMessage.value = res.message || "Email verified! Awaiting Administrator approval.";
+    toast.success(res.message || "Email verified! Awaiting Administrator approval.");
   } catch (err: any) {
-    errorMessage.value = err.message || "Invalid or expired verification code.";
+    toast.error(err.message || "Invalid or expired verification code.");
   } finally {
     loading.value = false;
   }
@@ -360,8 +342,6 @@ async function onVerifyOtpSubmit() {
 
 async function onResendOtp() {
   if (resendCooldown.value > 0 || loading.value) return;
-  errorMessage.value = "";
-  successMessage.value = "";
   loading.value = true;
 
   try {
@@ -369,12 +349,12 @@ async function onResendOtp() {
       email: email.value.trim(),
       type: "signup"
     });
-    successMessage.value = msg || "A fresh verification code has been sent to your email.";
+    toast.success(msg || "A fresh verification code has been sent to your email.");
     otpCode.value = "";
     startCountdown();
     startResendCooldown();
   } catch (err: any) {
-    errorMessage.value = err.message || "Failed to resend verification code.";
+    toast.error(err.message || "Failed to resend verification code.");
   } finally {
     loading.value = false;
   }
@@ -635,38 +615,7 @@ async function onResendOtp() {
   text-decoration: underline;
 }
 
-.auth-alert {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 0.65rem 0.9rem;
-  border-radius: 10px;
-  font-size: 0.82rem;
-  margin-bottom: 1.1rem;
-}
 
-.alert-error {
-  background: rgba(239, 68, 68, 0.15);
-  border: 1px solid rgba(239, 68, 68, 0.3);
-  color: #fca5a5;
-}
-
-.alert-success {
-  background: rgba(34, 197, 94, 0.15);
-  border: 1px solid rgba(34, 197, 94, 0.3);
-  color: #86efac;
-}
-
-.alert-close {
-  margin-left: auto;
-  background: none;
-  border: none;
-  color: currentColor;
-  font-size: 1.2rem;
-  line-height: 1;
-  cursor: pointer;
-  padding: 0 4px;
-}
 
 .pending-icon-wrap {
   display: inline-flex;
