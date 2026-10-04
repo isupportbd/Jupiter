@@ -1,10 +1,20 @@
 <script setup lang="ts">
-import { ref } from "vue";
+import { computed, ref } from "vue";
 import { useRouter } from "vue-router";
+import { useAuthStore } from "@/stores/auth";
 import axios from "axios";
 import * as XLSX from "xlsx";
 
 const router = useRouter();
+const authStore = useAuthStore();
+
+const isSubscriptionExpired = computed(() => {
+  const roleName = String((authStore.user as any)?.role?.name || (authStore.user as any)?.role || "").toLowerCase();
+  const isAdmin = roleName === "superadmin" || roleName === "admin";
+  if (isAdmin) return false;
+  return Number((authStore.user as any)?.daysRemaining || 0) <= 0;
+});
+
 const selectedFile = ref<File | null>(null);
 const fileName = ref("");
 const fileInputRef = ref<HTMLInputElement | null>(null);
@@ -140,6 +150,11 @@ const handleFileChange = (event: Event) => {
 };
 
 const triggerFileInput = () => {
+  if (isSubscriptionExpired.value) {
+    error.value = "Your subscription has expired. File upload is disabled. Please contact the Administrator to renew.";
+    setTimeout(() => { error.value = null; }, 4000);
+    return;
+  }
   fileInputRef.value?.click();
 };
 
@@ -158,6 +173,11 @@ const clearFile = (e: Event) => {
 };
 
 const handlePreview = async () => {
+  if (isSubscriptionExpired.value) {
+    error.value = "Your subscription has expired. File upload is disabled. Please contact the Administrator to renew.";
+    setTimeout(() => { error.value = null; }, 4000);
+    return;
+  }
   if (!selectedFile.value) return;
   isProcessing.value = true;
   error.value = null;
@@ -477,6 +497,14 @@ const handleGoToReports = () => {
       class="d-none"
       @change="handleFileChange"
     />
+
+    <!-- Centered Expiry Warning Banner (If Expired) -->
+    <div v-if="isSubscriptionExpired" class="d-flex justify-content-center mb-3">
+      <div class="alert alert-warning d-inline-flex align-items-center gap-2 px-3 py-2 rounded-3 border-0 bg-warning bg-opacity-10 text-warning" style="font-size: 0.85rem; max-width: 600px;">
+        <i class="bi bi-exclamation-octagon-fill fs-5 flex-shrink-0"></i>
+        <span>Your 30-day subscription has expired. File upload is restricted. You can still view reports by clicking <strong>Go to Reports</strong>. Please contact Administrator to renew.</span>
+      </div>
+    </div>
 
     <!-- Centered Upload Bar -->
     <div class="d-flex align-items-center justify-content-center gap-3 flex-wrap mb-4">

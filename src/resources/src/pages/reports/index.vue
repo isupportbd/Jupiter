@@ -1,7 +1,17 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from "vue";
+import { useAuthStore } from "@/stores/auth";
 import axios from "axios";
 import ExcelJS from "exceljs";
+
+const authStore = useAuthStore();
+
+const isSubscriptionExpired = computed(() => {
+  const roleName = String((authStore.user as any)?.role?.name || (authStore.user as any)?.role || "").toLowerCase();
+  const isAdmin = roleName === "superadmin" || roleName === "admin";
+  if (isAdmin) return false;
+  return Number((authStore.user as any)?.daysRemaining || 0) <= 0;
+});
 
 type TabType = "local_lc" | "beneficiary" | "monthwise";
 const activeTab = ref<TabType>("local_lc");
@@ -276,6 +286,10 @@ const fetchBeneficiaryData = async (page = 1) => {
 };
 
 const exportBenToExcel = async () => {
+  if (isSubscriptionExpired.value) {
+    alert("Your subscription has expired. Excel export is disabled. You can continue viewing reports on screen. Please contact the Administrator to renew.");
+    return;
+  }
   const targetBeneficiary = benBeneficiaryFilter.value.trim();
   if (!targetBeneficiary || benTotalRecords.value === 0) return;
   benIsExporting.value = true;
@@ -300,7 +314,7 @@ const exportBenToExcel = async () => {
     }
 
     const workbook = new ExcelJS.Workbook();
-    workbook.creator = "Bond Data Analysis V2";
+    workbook.creator = "Jupiter";
     const sheet = workbook.addWorksheet("Beneficiary LC Report", {
       views: [{ showGridLines: true }]
     });
@@ -527,6 +541,10 @@ const changePage = (page: number) => {
 
 // ExcelJS Export function
 const exportToExcel = async () => {
+  if (isSubscriptionExpired.value) {
+    alert("Your subscription has expired. Excel export is disabled. You can continue viewing reports on screen. Please contact the Administrator to renew.");
+    return;
+  }
   if (totalRecords.value === 0) return;
   isExporting.value = true;
 
@@ -551,7 +569,7 @@ const exportToExcel = async () => {
 
     // 2. Create ExcelJS Workbook and Sheet
     const workbook = new ExcelJS.Workbook();
-    workbook.creator = "Bond Data Analysis V2";
+    workbook.creator = "Jupiter";
     workbook.created = new Date();
 
     const sheet = workbook.addWorksheet("Local LC Report", {

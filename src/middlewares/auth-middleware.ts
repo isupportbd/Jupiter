@@ -39,10 +39,6 @@ export async function authMiddleware(c: Context, next: Next) {
         if (user.status === "suspended" || user.status === "rejected") {
           return c.json({ message: "Your account has been suspended by the administrator." }, 403);
         }
-
-        if (!user.subscriptionExpiresAt || new Date(user.subscriptionExpiresAt).getTime() <= Date.now()) {
-          return c.json({ message: "Your 30-day access has expired. Please contact administrator to renew." }, 403);
-        }
       }
 
       // Fast path: verified cryptographically signed JWT payload contains user identity

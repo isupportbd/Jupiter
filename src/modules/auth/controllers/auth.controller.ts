@@ -187,20 +187,6 @@ export const login: Handler = async (c: any) => {
       );
     }
 
-    // Check 30-Day Billing Cycle for standard users
-    if (!isSuperOrAdmin) {
-      if (!user.subscriptionExpiresAt || new Date(user.subscriptionExpiresAt).getTime() <= Date.now()) {
-        return c.json(
-          {
-            success: false,
-            isSubscriptionExpired: true,
-            message: "Your 30-day access has expired. Please contact the Administrator to renew your billing cycle."
-          },
-          HttpStatusCodes.FORBIDDEN
-        );
-      }
-    }
-
     // Generate & Dispatch 2FA Login OTP (Valid 5 minutes)
     const otp = await generateAndSaveOtp(cleanEmail, "login", 5);
     await mail.sendLoginOtpMail(cleanEmail, user.name, otp);

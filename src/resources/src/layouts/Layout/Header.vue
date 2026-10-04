@@ -34,8 +34,8 @@ const handleLogout = async () => {
 <template>
   <header class="idp-navbar">
     <div class="idp-grid-container h-100 d-flex align-items-center justify-content-between px-3">
-      <!-- Left: Brand Logo Only (NO MENU TABS) -->
-      <div class="d-flex align-items-center">
+      <!-- Left: Brand Logo Only -->
+      <div class="d-flex align-items-center" style="min-width: 140px;">
         <router-link :to="isAdmin ? '/users' : '/'" class="idp-brand d-flex align-items-center gap-2.5 text-decoration-none">
           <div class="brand-badge-icon">
             <svg width="24" height="24" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -64,27 +64,27 @@ const handleLogout = async () => {
         </router-link>
       </div>
 
-      <!-- Right: Subscription Countdown & User Profile Dropdown -->
-      <div class="d-flex align-items-center gap-3">
-        <!-- Exact Subscription Days Remaining Pill (Approved from 30 Days) -->
-        <div v-if="!isAdmin && authStore.isAuthenticated" class="d-flex align-items-center">
+      <!-- Center: Subscription Days Remaining Badge in CENTER -->
+      <div class="d-flex align-items-center justify-content-center flex-grow-1 px-2">
+        <div v-if="!isAdmin && authStore.isAuthenticated" class="d-flex align-items-center justify-content-center">
           <div
             :class="[
-              'subscription-pill-badge d-flex align-items-center gap-1.5 px-3 py-1 rounded-pill font-monospace',
+              'subscription-pill-badge font-monospace',
               daysRemaining > 5
                 ? 'sub-pill-green'
                 : daysRemaining > 0
                 ? 'sub-pill-amber'
                 : 'sub-pill-red'
             ]"
-            style="font-size: 0.8rem; font-weight: 600;"
           >
-            <i :class="daysRemaining > 0 ? 'bi bi-clock-history' : 'bi bi-exclamation-octagon-fill'"></i>
-            <span>{{ daysRemaining > 1 ? `${daysRemaining} Days Left` : daysRemaining === 1 ? '1 Day Left' : 'Access Expired' }}</span>
+            <i :class="daysRemaining > 0 ? 'bi bi-clock-history' : 'bi bi-exclamation-octagon-fill'" class="badge-icon"></i>
+            <span class="badge-text">{{ daysRemaining > 1 ? `${daysRemaining} Days Left` : daysRemaining === 1 ? '1 Day Left' : 'Access Expired' }}</span>
           </div>
         </div>
+      </div>
 
-        <!-- User Dropdown -->
+      <!-- Right: User Profile Dropdown -->
+      <div class="d-flex align-items-center justify-content-end" style="min-width: 140px;">
         <div class="position-relative" @click.stop>
           <button
             type="button"
@@ -167,25 +167,47 @@ const handleLogout = async () => {
 }
 
 .subscription-pill-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 6px 18px;
+  border-radius: 9999px;
   border: 1px solid transparent;
+  font-size: 0.84rem;
+  font-weight: 600;
+  line-height: 1.2;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
   transition: all 0.2s ease;
+}
+
+.badge-icon {
+  font-size: 0.95rem;
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.badge-text {
+  display: inline-block;
+  white-space: nowrap;
 }
 
 .sub-pill-green {
   background: rgba(34, 197, 94, 0.12);
-  border-color: rgba(34, 197, 94, 0.35);
+  border-color: rgba(34, 197, 94, 0.4);
   color: #4ade80;
 }
 
 .sub-pill-amber {
   background: rgba(245, 158, 11, 0.12);
-  border-color: rgba(245, 158, 11, 0.35);
+  border-color: rgba(245, 158, 11, 0.4);
   color: #fbbf24;
 }
 
 .sub-pill-red {
   background: rgba(239, 68, 68, 0.15);
-  border-color: rgba(239, 68, 68, 0.35);
+  border-color: rgba(239, 68, 68, 0.4);
   color: #f87171;
 }
 

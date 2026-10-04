@@ -2,6 +2,7 @@ import { and, desc, eq, gte, ilike, lte, or, sql } from "drizzle-orm";
 import type { Handler } from "hono";
 import { db, HttpStatusCodes } from "@/framework/facade.js";
 import { bondRecords } from "@/modules/bond/database/models/bond.js";
+import { users } from "@/modules/auth/database/models/user.js";
 
 /**
  * Helper to extract current authenticated user and permissions
@@ -56,9 +57,19 @@ function parseRecordNumeric(val: any): string {
  */
 export const processUploadChunk: Handler = async (c: any) => {
   try {
-    const { userId } = getAuthContext(c);
+    const { userId, isSuperOrAdmin } = getAuthContext(c);
     if (!userId) {
       return c.json({ message: "Unauthorized. Please log in first." }, HttpStatusCodes.UNAUTHORIZED);
+    }
+
+    if (!isSuperOrAdmin) {
+      const user = await db.query.users.findFirst({ where: eq(users.id, userId) });
+      if (!user?.subscriptionExpiresAt || new Date(user.subscriptionExpiresAt).getTime() <= Date.now()) {
+        return c.json(
+          { message: "Your subscription has expired. File upload is disabled. Please contact the Administrator to renew." },
+          HttpStatusCodes.FORBIDDEN
+        );
+      }
     }
 
     const body = await c.req.json();
