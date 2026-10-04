@@ -1,12 +1,13 @@
 import nodemailer from "nodemailer";
+import { randomBytes } from "node:crypto";
 import { mailConfig } from "@/config/index.js";
 import { logger } from "@/framework/support/logger.js";
 
 type MailPayload = {
   to: string;
   subject: string;
-  html?: string;
-  text?: string;
+  html: string;
+  text: string;
 };
 
 function getTransport() {
@@ -29,59 +30,72 @@ function getTransport() {
 }
 
 function getEmailHtmlTemplate(title: string, name: string, code: string, desc: string, expiryText: string) {
-  return `
-  <!DOCTYPE html>
-  <html>
-  <head>
-    <meta charset="utf-8">
-    <title>${title}</title>
-  </head>
-  <body style="margin: 0; padding: 0; background-color: #0b0f19; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; color: #f8fafc;">
-    <table width="100%" border="0" cellspacing="0" cellpadding="0" style="background-color: #0b0f19; padding: 40px 20px;">
-      <tr>
-        <td align="center">
-          <table width="100%" border="0" cellspacing="0" cellpadding="0" style="max-width: 480px; background-color: #131926; border: 1px solid #1e293b; border-radius: 16px; overflow: hidden; box-shadow: 0 20px 40px rgba(0,0,0,0.5);">
-            <!-- Header -->
-            <tr>
-              <td align="center" style="padding: 32px 24px 20px; background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); border-bottom: 1px solid #1e293b;">
-                <div style="font-size: 26px; font-weight: 800; color: #f8fafc; letter-spacing: -0.5px;">🪐 Jupiter</div>
-                <div style="font-size: 13px; color: #38bdf8; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; margin-top: 4px;">Security Verification</div>
-              </td>
-            </tr>
-            <!-- Content -->
-            <tr>
-              <td style="padding: 32px 28px;">
-                <h2 style="font-size: 18px; font-weight: 700; color: #f8fafc; margin: 0 0 12px 0;">Hello ${name || "User"},</h2>
-                <p style="font-size: 14px; color: #94a3b8; line-height: 1.6; margin: 0 0 24px 0;">
-                  ${desc}
-                </p>
-                <!-- OTP Code Display -->
-                <div style="text-align: center; margin: 28px 0;">
-                  <div style="display: inline-block; background: #020617; border: 2px solid #38bdf8; border-radius: 12px; padding: 14px 28px; font-family: 'Courier New', Courier, monospace; font-size: 32px; font-weight: 800; letter-spacing: 8px; color: #38bdf8; box-shadow: 0 0 20px rgba(56, 189, 248, 0.2);">
-                    ${code}
-                  </div>
-                </div>
-                <p style="font-size: 13px; color: #64748b; text-align: center; margin: 0 0 20px 0;">
-                  ⏳ ${expiryText}
-                </p>
-                <div style="background: rgba(56, 189, 248, 0.08); border-left: 3px solid #38bdf8; border-radius: 4px; padding: 12px 14px; font-size: 12px; color: #cbd5e1; line-height: 1.5;">
-                  <strong>Security Note:</strong> If you did not initiate this request, please ignore this email or contact support immediately.
-                </div>
-              </td>
-            </tr>
-            <!-- Footer -->
-            <tr>
-              <td align="center" style="padding: 20px; background-color: #0b0f19; border-top: 1px solid #1e293b; font-size: 12px; color: #64748b;">
-                &copy; ${new Date().getFullYear()} Jupiter Intelligence & Analytics. All rights reserved.
-              </td>
-            </tr>
-          </table>
-        </td>
-      </tr>
-    </table>
-  </body>
-  </html>
-  `;
+  return `<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+  <meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>${title}</title>
+</head>
+<body style="margin:0; padding:0; background-color:#f1f5f9; font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; -webkit-font-smoothing:antialiased;">
+  <table border="0" cellpadding="0" cellspacing="0" width="100%" style="background-color:#f1f5f9; padding:30px 15px;">
+    <tr>
+      <td align="center">
+        <table border="0" cellpadding="0" cellspacing="0" width="100%" style="max-width:520px; background-color:#ffffff; border-radius:12px; border:1px solid #e2e8f0; overflow:hidden; box-shadow:0 4px 6px -1px rgba(0,0,0,0.05);">
+          <!-- Brand Header -->
+          <tr>
+            <td align="center" style="padding:28px 24px; background-color:#0f172a; border-bottom:3px solid #2563eb;">
+              <table border="0" cellpadding="0" cellspacing="0">
+                <tr>
+                  <td align="center">
+                    <span style="font-size:24px; font-weight:800; color:#ffffff; letter-spacing:-0.5px;">Jupiter</span>
+                  </td>
+                </tr>
+                <tr>
+                  <td align="center" style="padding-top:4px;">
+                    <span style="font-size:12px; font-weight:600; color:#38bdf8; text-transform:uppercase; letter-spacing:0.5px;">Intelligence &amp; Analytics</span>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+          <!-- Body Content -->
+          <tr>
+            <td style="padding:32px 32px 24px;">
+              <h1 style="font-size:18px; font-weight:700; color:#0f172a; margin:0 0 14px 0;">Hello ${name || "User"},</h1>
+              <p style="font-size:14px; line-height:1.6; color:#475569; margin:0 0 24px 0;">
+                ${desc}
+              </p>
+              <!-- OTP Box -->
+              <table border="0" cellpadding="0" cellspacing="0" width="100%" style="margin:24px 0;">
+                <tr>
+                  <td align="center">
+                    <div style="display:inline-block; background-color:#f8fafc; border:2px solid #2563eb; border-radius:8px; padding:12px 28px; font-family:'Courier New', Courier, monospace; font-size:32px; font-weight:800; letter-spacing:8px; color:#1e40af;">
+                      ${code}
+                    </div>
+                  </td>
+                </tr>
+              </table>
+              <p style="font-size:13px; color:#64748b; text-align:center; margin:0 0 24px 0;">
+                ${expiryText}
+              </p>
+              <div style="background-color:#f8fafc; border:1px solid #e2e8f0; border-left:4px solid #2563eb; border-radius:6px; padding:12px 16px; font-size:12px; line-height:1.5; color:#64748b;">
+                <strong style="color:#0f172a;">Security Notice:</strong> If you did not request this code, no further action is required. Your account remains secure.
+              </div>
+            </td>
+          </tr>
+          <!-- Footer -->
+          <tr>
+            <td align="center" style="padding:20px; background-color:#f8fafc; border-top:1px solid #e2e8f0; font-size:12px; color:#94a3b8;">
+              &copy; ${new Date().getFullYear()} Jupiter. All rights reserved.
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`;
 }
 
 export const mail = {
@@ -89,32 +103,29 @@ export const mail = {
    * Why: Sends transactional email through configured SMTP transport.
    * When: Features need notifications/password reset/signup email.
    * Where: Jobs and event handlers.
-   * How: Uses dynamic nodemailer transport and respects the fail-silent setting.
+   * How: Uses dynamic nodemailer transport with strict anti-spam compliance.
    */
   async sendMail(payload: MailPayload) {
     try {
-      const textFallback =
-        payload.text ||
-        (payload.html
-          ? payload.html
-              .replace(/<style[^>]*>.*?<\/style>/gi, "")
-              .replace(/<[^>]+>/g, " ")
-              .replace(/\s+/g, " ")
-              .trim()
-          : undefined);
-
       const fromName = (mailConfig as any).fromName || process.env.MAIL_FROM_NAME || "Jupiter";
       const fromAddress = process.env.MAIL_FROM_ADDRESS || mailConfig.fromAddress || "noreply@isupportbd.com";
+      const domain = fromAddress.includes("@") ? fromAddress.split("@")[1] : "isupportbd.com";
       const transport = getTransport();
+
+      const messageId = `<${Date.now()}.${randomBytes(8).toString("hex")}@${domain}>`;
 
       const info = await transport.sendMail({
         from: `"${fromName}" <${fromAddress}>`,
-        ...payload,
-        text: textFallback,
+        replyTo: fromAddress,
+        to: payload.to,
+        subject: payload.subject,
+        text: payload.text,
+        html: payload.html,
+        messageId,
         headers: {
-          "X-Entity-Ref-ID": `${Date.now()}-${Math.random().toString(36).substring(2, 8)}`,
-          "X-Auto-Response-Suppress": "OOF, AutoReply",
-          Auto_Submitted: "auto-generated"
+          "X-Priority": "3",
+          "X-MSMail-Priority": "Normal",
+          "Importance": "Normal"
         }
       });
 
@@ -138,17 +149,15 @@ export const mail = {
     console.log(`[AUTH OTP - SIGNUP] Code for ${to} is: [ ${otp} ]`);
     console.log(`========================================\n`);
 
-    const html = getEmailHtmlTemplate(
-      "Verify Your Jupiter Account",
-      name,
-      otp,
-      "Thank you for registering with Jupiter. Please use the 6-digit verification code below to confirm your email address:",
-      "This code is valid for 10 minutes."
-    );
+    const desc = "Thank you for registering with Jupiter. Please use the verification code below to verify your email address:";
+    const expiryText = "This code is valid for 10 minutes.";
+    const html = getEmailHtmlTemplate("Verify Your Jupiter Account", name, otp, desc, expiryText);
+    const text = `Hello ${name || "User"},\n\n${desc}\n\nVerification Code: ${otp}\n\n${expiryText}\n\nIf you did not request this, please ignore this message.\n\n- Jupiter`;
 
     return this.sendMail({
       to,
-      subject: `Jupiter - Your Account Verification Code (${otp})`,
+      subject: `Your Jupiter verification code: ${otp}`,
+      text,
       html
     });
   },
@@ -158,17 +167,15 @@ export const mail = {
     console.log(`[AUTH OTP - LOGIN 2FA] Code for ${to} is: [ ${otp} ]`);
     console.log(`========================================\n`);
 
-    const html = getEmailHtmlTemplate(
-      "Jupiter Login Verification Code",
-      name,
-      otp,
-      "A sign-in attempt was made for your Jupiter account. Please use the 6-digit one-time code below to complete your sign-in:",
-      "This code is valid for 5 minutes."
-    );
+    const desc = "A sign-in attempt was made for your Jupiter account. Please use the security code below to complete your sign-in:";
+    const expiryText = "This code is valid for 5 minutes.";
+    const html = getEmailHtmlTemplate("Jupiter Login Security Code", name, otp, desc, expiryText);
+    const text = `Hello ${name || "User"},\n\n${desc}\n\nSecurity Code: ${otp}\n\n${expiryText}\n\nIf you did not make this request, please change your password immediately.\n\n- Jupiter`;
 
     return this.sendMail({
       to,
-      subject: `Jupiter - Login Security Code (${otp})`,
+      subject: `Your Jupiter security code: ${otp}`,
+      text,
       html
     });
   },
@@ -178,17 +185,15 @@ export const mail = {
     console.log(`[AUTH OTP - RESET PASSWORD] Code for ${to} is: [ ${otp} ]`);
     console.log(`========================================\n`);
 
-    const html = getEmailHtmlTemplate(
-      "Reset Your Jupiter Password",
-      name,
-      otp,
-      "We received a request to reset your Jupiter account password. Enter the 6-digit code below to set a new password:",
-      "This code is valid for 10 minutes."
-    );
+    const desc = "We received a request to reset your Jupiter account password. Enter the code below to set a new password:";
+    const expiryText = "This code is valid for 10 minutes.";
+    const html = getEmailHtmlTemplate("Reset Your Jupiter Password", name, otp, desc, expiryText);
+    const text = `Hello ${name || "User"},\n\n${desc}\n\nReset Code: ${otp}\n\n${expiryText}\n\nIf you did not request this password reset, please ignore this email.\n\n- Jupiter`;
 
     return this.sendMail({
       to,
-      subject: `Jupiter - Password Reset Code (${otp})`,
+      subject: `Your Jupiter password reset code: ${otp}`,
+      text,
       html
     });
   }
