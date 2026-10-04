@@ -38,14 +38,14 @@ const lcDateTo = ref("");
 const entryDateFrom = ref("");
 const entryDateTo = ref("");
 
-// Beneficiary suggestions & Multi-select Popover State
+// Beneficiary suggestions & Multi-select State
 const beneficiaryOptions = ref<string[]>([]);
+const localBeneficiarySuggestions = ref<string[]>([]);
 const showBeneficiaryDropdown = ref(false);
-const benDropdownRef = ref<HTMLElement | null>(null);
 
-const beneficiaryLabel = computed(() => {
+const beneficiaryPlaceholder = computed(() => {
   if (selectedBeneficiaries.value.length === 0) {
-    return "Search / Select Beneficiary...";
+    return "Type to search Beneficiary...";
   }
   if (selectedBeneficiaries.value.length === 1) {
     return selectedBeneficiaries.value[0];
@@ -69,38 +69,79 @@ const toggleBeneficiary = (name: string) => {
   fetchLocalLcData(1);
 };
 
-const selectAllBeneficiaries = () => {
-  if (filteredBeneficiaries.value.length === 0) return;
-  const combined = Array.from(new Set([...selectedBeneficiaries.value, ...filteredBeneficiaries.value]));
-  selectedBeneficiaries.value = combined;
-  fetchLocalLcData(1);
-};
-
 const clearAllBeneficiaries = () => {
   selectedBeneficiaries.value = [];
   beneficiarySearchInput.value = "";
+  showBeneficiaryDropdown.value = false;
+  localBeneficiarySuggestions.value = [];
   fetchLocalLcData(1);
 };
 
-const filteredBeneficiaries = computed(() => {
-  if (!beneficiarySearchInput.value.trim()) {
-    return beneficiaryOptions.value;
+let localBenSearchTimeout: any = null;
+const searchLocalBeneficiariesFromApi = (query: string) => {
+  clearTimeout(localBenSearchTimeout);
+  const q = (query || "").trim();
+  if (!q) {
+    localBeneficiarySuggestions.value = [];
+    showBeneficiaryDropdown.value = false;
+    return;
   }
-  const q = beneficiarySearchInput.value.toLowerCase().trim();
-  return beneficiaryOptions.value.filter((b) => b && b.toLowerCase().includes(q));
-});
+  const filtered = beneficiaryOptions.value
+    .filter((name) => name && name.toLowerCase().includes(q.toLowerCase()))
+    .slice(0, 50);
+  localBeneficiarySuggestions.value = filtered;
+  showBeneficiaryDropdown.value = filtered.length > 0;
+
+  localBenSearchTimeout = setTimeout(async () => {
+    try {
+      const res = await axios.get("/api/bond/beneficiaries", {
+        params: { search: q }
+      });
+      if (res.data && res.data.success && Array.isArray(res.data.data)) {
+        const rawNames: string[] = res.data.data
+          .map((item: any) => (typeof item === "string" ? item.trim() : String(item?.name || "").trim()))
+          .filter((name: string) => name && name.length > 1 && !/^[.\s,;:-]+$/.test(name));
+        const uniqueNames = Array.from(new Set(rawNames));
+        if (beneficiarySearchInput.value.trim()) {
+          localBeneficiarySuggestions.value = uniqueNames;
+          showBeneficiaryDropdown.value = uniqueNames.length > 0;
+        }
+      }
+    } catch (_) {}
+  }, 150);
+};
+
+const handleBeneficiaryFocus = () => {
+  const q = beneficiarySearchInput.value.trim();
+  if (q) {
+    searchLocalBeneficiariesFromApi(q);
+  }
+};
+
+const handleBeneficiaryInput = () => {
+  const q = beneficiarySearchInput.value.trim();
+  if (!q) {
+    localBeneficiarySuggestions.value = [];
+    showBeneficiaryDropdown.value = false;
+  } else {
+    searchLocalBeneficiariesFromApi(q);
+  }
+  if (selectedBeneficiaries.value.length === 0) {
+    handleSearchInput();
+  }
+};
+
+const handleBeneficiaryBlur = () => {
+  setTimeout(() => {
+    showBeneficiaryDropdown.value = false;
+  }, 250);
+};
 
 const getBeneficiaryParam = () => {
   if (selectedBeneficiaries.value.length > 0) {
     return JSON.stringify(selectedBeneficiaries.value);
   }
-  return undefined;
-};
-
-const handleClickOutsideBen = (e: MouseEvent) => {
-  if (benDropdownRef.value && !benDropdownRef.value.contains(e.target as Node)) {
-    showBeneficiaryDropdown.value = false;
-  }
+  return beneficiarySearchInput.value.trim() || undefined;
 };
 
 let debounceTimer: any = null;
@@ -969,123 +1010,50 @@ onUnmounted(() => {
             <!-- 3. Beneficiary Name (Top) & Search (Bottom) -->
             <div class="col-12 col-md-6 col-lg">
               <div class="d-flex flex-column justify-content-between h-100 gap-1">
-                <!-- Beneficiary Multi-Select Trigger (Single-Line Fixed - Exactly like Managers sample) -->
-                <div ref="benDropdownRef" class="position-relative w-100">
-                  <button
-                    type="button"
-                    class="ben-trigger-btn w-100 d-flex align-items-center justify-content-between text-start"
-                    :class="{
-                      'ben-trigger-open': showBeneficiaryDropdown,
-                      'has-selection': selectedBeneficiaries.length > 0
-                    }"
-                    @click="showBeneficiaryDropdown = !showBeneficiaryDropdown"
-                  >
-                    <div class="d-flex align-items-center gap-1.5 overflow-hidden text-truncate me-1">
-                      <i
-                        class="bi flex-shrink-0"
-                        :class="
-                          selectedBeneficiaries.length === 0
-                            ? 'bi-person-badge text-muted'
-                            : 'bi-person-badge-fill text-info'
-                        "
-                      ></i>
-                      <span
-                        class="text-truncate small"
-                        :class="selectedBeneficiaries.length === 0 ? 'text-muted' : 'text-light fw-medium'"
-                      >
-                        {{ beneficiaryLabel }}
-                      </span>
-                    </div>
+                <!-- Direct Beneficiary Input with Live Search & Dropdown Checkmark Toggle -->
+                <div class="position-relative w-100">
+                  <div class="input-group input-group-sm">
+                    <span class="input-group-text filter-addon" title="Beneficiary Filter">
+                      <i class="bi bi-person-badge"></i>
+                    </span>
+                    <input
+                      v-model="beneficiarySearchInput"
+                      type="text"
+                      class="form-control form-control-sm filter-input"
+                      :placeholder="beneficiaryPlaceholder"
+                      autocomplete="off"
+                      @focus="handleBeneficiaryFocus"
+                      @input="handleBeneficiaryInput"
+                      @blur="handleBeneficiaryBlur"
+                      @keydown.esc="showBeneficiaryDropdown = false"
+                    />
+                    <button
+                      v-if="selectedBeneficiaries.length > 0 || beneficiarySearchInput"
+                      type="button"
+                      class="btn filter-clear-btn"
+                      title="Clear Beneficiary Filter"
+                      @click="clearAllBeneficiaries"
+                    >
+                      <i class="bi bi-x"></i>
+                    </button>
+                  </div>
 
-                    <div class="d-flex align-items-center gap-1 flex-shrink-0">
-                      <button
-                        v-if="selectedBeneficiaries.length > 0"
-                        type="button"
-                        class="btn-clear-ben"
-                        title="Clear all selected beneficiaries"
-                        @click.stop="clearAllBeneficiaries"
-                      >
-                        <i class="bi bi-x"></i>
-                      </button>
-                      <i
-                        class="bi text-muted small transition-transform"
-                        :class="showBeneficiaryDropdown ? 'bi-chevron-up' : 'bi-chevron-down'"
-                      ></i>
-                    </div>
-                  </button>
-
-                  <!-- Dropdown Popover (Scrollable List with Search inside - Handles 100+ beneficiaries smoothly) -->
+                  <!-- Autocomplete Dropdown with Clean Checkmarks (No Box Border, No Inner Search) -->
                   <div
-                    v-if="showBeneficiaryDropdown"
-                    class="beneficiary-popover-dropdown shadow-lg position-absolute start-0 mt-1 z-3"
+                    v-if="showBeneficiaryDropdown && localBeneficiarySuggestions.length > 0"
+                    class="beneficiary-autocomplete-dropdown shadow-lg"
                   >
-                    <!-- Search Input Header -->
-                    <div class="p-2 border-bottom border-secondary border-opacity-50">
-                      <div class="position-relative d-flex align-items-center">
-                        <i class="bi bi-search ben-popover-search-icon"></i>
-                        <input
-                          v-model="beneficiarySearchInput"
-                          type="text"
-                          class="form-control form-control-sm ben-popover-search-input"
-                          placeholder="Search beneficiaries..."
-                          autofocus
-                        />
-                        <button
-                          v-if="beneficiarySearchInput"
-                          type="button"
-                          class="ben-popover-search-clear"
-                          title="Clear search text"
-                          @click="beneficiarySearchInput = ''"
-                        >
-                          <i class="bi bi-x"></i>
-                        </button>
+                    <div
+                      v-for="(name, bIdx) in localBeneficiarySuggestions"
+                      :key="bIdx"
+                      class="ben-dropdown-item d-flex align-items-center gap-2 px-3 py-2 cursor-pointer"
+                      :class="{ 'is-selected': isBeneficiarySelected(name) }"
+                      @mousedown.prevent="toggleBeneficiary(name)"
+                    >
+                      <div class="ben-check-slot flex-shrink-0 d-flex align-items-center justify-content-center">
+                        <i v-if="isBeneficiarySelected(name)" class="bi bi-check2 text-white fs-6 fw-bold"></i>
                       </div>
-                    </div>
-
-                    <!-- Quick Actions Header -->
-                    <div class="d-flex align-items-center justify-content-between px-3 py-1 bg-dark bg-opacity-75 border-bottom border-secondary border-opacity-25 text-muted small" style="font-size: 0.72rem;">
-                      <span>{{ selectedBeneficiaries.length }} of {{ beneficiaryOptions.length }} selected</span>
-                      <div class="d-flex gap-2">
-                        <button
-                          type="button"
-                          class="btn btn-link btn-xs text-info p-0 text-decoration-none"
-                          @click="selectAllBeneficiaries"
-                        >
-                          Select All
-                        </button>
-                        <span class="text-secondary">•</span>
-                        <button
-                          type="button"
-                          class="btn btn-link btn-xs text-secondary p-0 text-decoration-none"
-                          :disabled="selectedBeneficiaries.length === 0"
-                          @click="clearAllBeneficiaries"
-                        >
-                          Clear
-                        </button>
-                      </div>
-                    </div>
-
-                    <!-- Beneficiaries List (Scrollable) -->
-                    <div class="ben-popover-list py-1 overflow-auto" style="max-height: 240px;">
-                      <div
-                        v-if="filteredBeneficiaries.length === 0"
-                        class="text-center py-3 text-muted small"
-                      >
-                        No beneficiaries found.
-                      </div>
-
-                      <div
-                        v-for="name in filteredBeneficiaries"
-                        :key="name"
-                        class="ben-popover-item d-flex align-items-center gap-2 px-3 py-2 cursor-pointer"
-                        :class="{ 'ben-item-selected': isBeneficiarySelected(name) }"
-                        @click="toggleBeneficiary(name)"
-                      >
-                        <div class="ben-check-slot flex-shrink-0 d-flex align-items-center justify-content-center">
-                          <i v-if="isBeneficiarySelected(name)" class="bi bi-check2 text-white fs-6 fw-bold"></i>
-                        </div>
-                        <span class="text-white small text-truncate">{{ name }}</span>
-                      </div>
+                      <span class="ben-item-name text-white small text-truncate">{{ name }}</span>
                     </div>
                   </div>
                 </div>
@@ -2180,124 +2148,53 @@ onUnmounted(() => {
   letter-spacing: 0.02em;
 }
 
-/* Beneficiary Single-Line Popover Dropdown */
-.ben-trigger-btn {
-  background: #101622 !important;
-  border: 1px solid #233044 !important;
-  color: #e2e8f0;
-  border-radius: 4px;
-  height: 31px;
-  min-height: 31px;
-  max-height: 31px;
-  padding: 0 8px;
-  cursor: pointer;
-  transition: all 0.15s ease;
-  white-space: nowrap;
-}
-
-.ben-trigger-btn:hover {
-  border-color: #38bdf8 !important;
-  background: #141c2b !important;
-}
-
-.ben-trigger-open {
-  border-color: #38bdf8 !important;
-  box-shadow: 0 0 0 1px rgba(56, 189, 248, 0.3) !important;
-  background: #141c2b !important;
-}
-
-.btn-clear-ben {
-  background: transparent;
-  border: none;
-  color: #94a3b8;
-  padding: 0;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 0.95rem;
-  line-height: 1;
-  cursor: pointer;
-  border-radius: 50%;
-  transition: color 0.15s ease;
-}
-
-.btn-clear-ben:hover {
-  color: #f87171;
-}
-
-.beneficiary-popover-dropdown {
+/* Custom Beneficiary Autocomplete Menu */
+.beneficiary-autocomplete-dropdown {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
   background: #0f1624;
   border: 1px solid #283548;
   border-radius: 6px;
-  width: 100%;
-  min-width: 280px;
-  z-index: 1060;
-  box-shadow: 0 12px 30px -5px rgba(0, 0, 0, 0.7);
+  max-height: 250px;
+  overflow-y: auto;
+  z-index: 1050;
+  margin-top: 2px;
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.6);
+  padding: 4px 0;
 }
 
-.ben-popover-search-icon {
-  position: absolute;
-  left: 9px;
-  top: 50%;
-  transform: translateY(-50%);
-  color: #64748b;
-  font-size: 0.75rem;
-  pointer-events: none;
-}
-
-.ben-popover-search-input {
-  background: #151d2b !important;
-  border: 1px solid #334155 !important;
-  color: #f8fafc !important;
-  padding-left: 28px !important;
-  border-radius: 4px;
-  font-size: 0.78rem;
-  height: 28px;
-}
-
-.ben-popover-search-input:focus {
-  border-color: #38bdf8 !important;
-  box-shadow: none !important;
-}
-
-.ben-popover-search-clear {
-  position: absolute;
-  right: 6px;
-  top: 50%;
-  transform: translateY(-50%);
-  background: transparent;
-  border: none;
-  color: #64748b;
-  padding: 0;
-  font-size: 0.85rem;
-  cursor: pointer;
-}
-
-.ben-popover-search-clear:hover {
-  color: #f87171;
-}
-
-.ben-popover-item {
+.ben-dropdown-item {
   transition: background 0.12s ease;
+  padding: 0.45rem 0.75rem;
   border-radius: 4px;
   margin: 1px 4px;
+  cursor: pointer;
+  text-align: left;
 }
 
-.ben-popover-item:hover {
-  background: rgba(255, 255, 255, 0.05);
+.ben-dropdown-item:hover {
+  background: rgba(255, 255, 255, 0.06);
 }
 
-.ben-popover-item.ben-item-selected {
+.ben-dropdown-item.is-selected {
   background: #1b2533;
 }
 
-.ben-popover-item.ben-item-selected:hover {
+.ben-dropdown-item.is-selected:hover {
   background: #233042;
 }
 
 .ben-check-slot {
   width: 18px;
   height: 18px;
+}
+
+.ben-item-name {
+  color: #f1f5f9;
+  font-size: 0.83rem;
+  font-weight: 500;
 }
 
 .chip-clear-all-btn {
