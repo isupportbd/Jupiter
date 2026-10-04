@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from "vue";
+import { computed, onMounted, onUnmounted, ref } from "vue";
 import { useRouter } from "vue-router";
 import { useAuthStore } from "@/stores/auth";
 
@@ -7,6 +7,21 @@ const router = useRouter();
 const authStore = useAuthStore();
 
 const isDropdownOpen = ref(false);
+const dropdownRef = ref<HTMLElement | null>(null);
+
+const handleClickOutside = (e: MouseEvent) => {
+  if (dropdownRef.value && !dropdownRef.value.contains(e.target as Node)) {
+    isDropdownOpen.value = false;
+  }
+};
+
+onMounted(() => {
+  document.addEventListener("click", handleClickOutside);
+});
+
+onUnmounted(() => {
+  document.removeEventListener("click", handleClickOutside);
+});
 
 const isAdmin = computed(() => {
   const roleName = String((authStore.user as any)?.role?.name || (authStore.user as any)?.role || "").toLowerCase();
@@ -85,7 +100,7 @@ const handleLogout = async () => {
 
       <!-- Right: User Profile Dropdown -->
       <div class="d-flex align-items-center justify-content-end" style="min-width: 140px;">
-        <div class="position-relative" @click.stop>
+        <div ref="dropdownRef" class="position-relative">
           <button
             type="button"
             class="btn btn-dark border border-secondary p-1 px-2.5 rounded d-flex align-items-center gap-2"
