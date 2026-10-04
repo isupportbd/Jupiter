@@ -54,7 +54,7 @@ const searchLocalBeneficiariesFromApi = (query: string) => {
   }
   showBeneficiaryDropdown.value = true;
   localBeneficiarySuggestions.value = beneficiaryOptions.value
-    .filter((b) => (b.name && b.name.toLowerCase().includes(q.toLowerCase())) || (b.address && b.address.toLowerCase().includes(q.toLowerCase())))
+    .filter((b) => b.name && b.name.toLowerCase().includes(q.toLowerCase()))
     .slice(0, 50);
 
   localBenSearchTimeout = setTimeout(async () => {
@@ -122,7 +122,7 @@ const searchBeneficiariesFromApi = (query: string) => {
   }
   showBenBeneficiaryDropdown.value = true;
   benBeneficiarySuggestions.value = beneficiaryOptions.value
-    .filter((b) => (b.name && b.name.toLowerCase().includes(q.toLowerCase())) || (b.address && b.address.toLowerCase().includes(q.toLowerCase())))
+    .filter((b) => b.name && b.name.toLowerCase().includes(q.toLowerCase()))
     .slice(0, 50);
 
   // Query backend for full database matches

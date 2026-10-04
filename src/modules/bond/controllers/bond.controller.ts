@@ -340,7 +340,7 @@ export const getBeneficiaries: Handler = async (c: any) => {
 
     if (search) {
       whereConditions.push(
-        sql`(beneficiary_name ILIKE ${`%${search}%`} OR beneficiary_address ILIKE ${`%${search}%`})`
+        sql`beneficiary_name ILIKE ${`%${search}%`}`
       );
     }
 
