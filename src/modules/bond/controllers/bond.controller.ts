@@ -252,21 +252,40 @@ export const getLocalLcReport: Handler = async (c: any) => {
     const totalLcValue = Number(countResult[0]?.totalLcValue || 0);
     const totalPages = isExport ? 1 : Math.ceil(total / limit) || 1;
 
-    // Fetch Records
+    // Fetch Records with all columns
     const dataQuery = db
       .select({
         id: bondRecords.id,
         bankName: bondRecords.bankName,
         branchName: bondRecords.branchName,
+        adsCode: bondRecords.adsCode,
+        lcYear: bondRecords.lcYear,
+        lcNature: bondRecords.lcNature,
+        lcSerial: bondRecords.lcSerial,
         lcId: bondRecords.lcId,
         lcValue: bondRecords.lcValue,
         currency: bondRecords.currency,
         lcDate: bondRecords.lcDate,
         lcExpiryDate: bondRecords.lcExpiryDate,
+        bbUsansePeriod: bondRecords.bbUsansePeriod,
+        lastShipDate: bondRecords.lastShipDate,
+        proceedsDate: bondRecords.proceedsDate,
+        applicantName: bondRecords.applicantName,
+        irc: bondRecords.irc,
         exporterInfo: bondRecords.exporterInfo,
+        exportLcNumber: bondRecords.exportLcNumber,
         beneficiaryBank: bondRecords.beneficiaryBank,
+        beneficiaryBranch: bondRecords.beneficiaryBranch,
         beneficiaryName: bondRecords.beneficiaryName,
         beneficiaryAddress: bondRecords.beneficiaryAddress,
+        beneficiaryIrc: bondRecords.beneficiaryIrc,
+        beneficiaryErc: bondRecords.beneficiaryErc,
+        piNumber: bondRecords.piNumber,
+        piDate: bondRecords.piDate,
+        bondLicense: bondRecords.bondLicense,
+        accepted: bondRecords.accepted,
+        cancelYn: bondRecords.cancelYn,
+        cancelCause: bondRecords.cancelCause,
         entryDate: bondRecords.entryDate
       })
       .from(bondRecords);

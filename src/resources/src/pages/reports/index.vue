@@ -13,7 +13,7 @@ const isSubscriptionExpired = computed(() => {
   return Number((authStore.user as any)?.daysRemaining || 0) <= 0;
 });
 
-type TabType = "local_lc" | "beneficiary" | "monthwise";
+type TabType = "local_lc" | "beneficiary" | "all_data" | "monthwise";
 const activeTab = ref<TabType>("local_lc");
 
 // Local LC Report State
@@ -572,34 +572,73 @@ const exportToExcel = async () => {
     workbook.creator = "Jupiter";
     workbook.created = new Date();
 
-    const sheet = workbook.addWorksheet("Beneficiary Report", {
+    const isAllData = activeTab.value === "all_data";
+    const sheet = workbook.addWorksheet(isAllData ? "All Data Report" : "Beneficiary Report", {
       views: [{ showGridLines: true }]
     });
 
-    // 3. Define Columns (Beneficiary Name & Address first)
-    sheet.columns = [
-      { header: "#", key: "sl", width: 6 },
-      { header: "BENEFICIARY_NAME", key: "beneficiaryName", width: 28 },
-      { header: "BENEFICIARY_ADDRESS", key: "beneficiaryAddress", width: 34 },
-      { header: "BANK_NAME", key: "bankName", width: 28 },
-      { header: "BRANCH_NAME", key: "branchName", width: 24 },
-      { header: "LC ID", key: "lcId", width: 20 },
-      { header: "LC_VALUE", key: "lcValue", width: 18 },
-      { header: "LC_DATE", key: "lcDate", width: 14 },
-      { header: "LC_EXPIRY_DATE", key: "lcExpiryDate", width: 16 },
-      { header: "EXPORTER_INFO", key: "exporterInfo", width: 30 },
-      { header: "BENEFICIARY_BANK", key: "beneficiaryBank", width: 28 },
-      { header: "ENTRY_DATE", key: "entryDate", width: 14 }
-    ];
+    // 3. Define Columns
+    if (isAllData) {
+      sheet.columns = [
+        { header: "#", key: "sl", width: 6 },
+        { header: "BANK_NAME", key: "bankName", width: 25 },
+        { header: "BRANCH_NAME", key: "branchName", width: 20 },
+        { header: "ADS_CODE", key: "adsCode", width: 14 },
+        { header: "LC_YEAR", key: "lcYear", width: 12 },
+        { header: "LC_NATURE", key: "lcNature", width: 14 },
+        { header: "LC_SERIAL", key: "lcSerial", width: 14 },
+        { header: "LC ID", key: "lcId", width: 20 },
+        { header: "LC_VALUE", key: "lcValue", width: 18 },
+        { header: "CURRENCY", key: "currency", width: 12 },
+        { header: "LC_DATE", key: "lcDate", width: 14 },
+        { header: "LC_EXPIRY_DATE", key: "lcExpiryDate", width: 16 },
+        { header: "BB_USANSE_PERIOD", key: "bbUsansePeriod", width: 18 },
+        { header: "LAST_SHIP_DATE", key: "lastShipDate", width: 16 },
+        { header: "PROCEEDS_DATE", key: "proceedsDate", width: 16 },
+        { header: "APPLICANT_NAME", key: "applicantName", width: 26 },
+        { header: "IRC", key: "irc", width: 14 },
+        { header: "EXPORTER_INFO", key: "exporterInfo", width: 28 },
+        { header: "EXPORT_LC_NUMBER", key: "exportLcNumber", width: 20 },
+        { header: "BENEFICIARY_BANK", key: "beneficiaryBank", width: 24 },
+        { header: "BENEFICIARY_BRANCH", key: "beneficiaryBranch", width: 20 },
+        { header: "BENEFICIARY_NAME", key: "beneficiaryName", width: 28 },
+        { header: "BENEFICIARY_ADDRESS", key: "beneficiaryAddress", width: 34 },
+        { header: "BENEFICIARY_IRC", key: "beneficiaryIrc", width: 16 },
+        { header: "BENEFICIARY_ERC", key: "beneficiaryErc", width: 16 },
+        { header: "PI_NUMBER", key: "piNumber", width: 18 },
+        { header: "PI_DATE", key: "piDate", width: 14 },
+        { header: "BOND_LICENSE", key: "bondLicense", width: 18 },
+        { header: "ACCEPTED", key: "accepted", width: 14 },
+        { header: "CANCEL_YN", key: "cancelYn", width: 12 },
+        { header: "CANCEL_CAUSE", key: "cancelCause", width: 20 },
+        { header: "ENTRY_DATE", key: "entryDate", width: 14 }
+      ];
+    } else {
+      sheet.columns = [
+        { header: "#", key: "sl", width: 6 },
+        { header: "BENEFICIARY_NAME", key: "beneficiaryName", width: 28 },
+        { header: "BENEFICIARY_ADDRESS", key: "beneficiaryAddress", width: 34 },
+        { header: "BANK_NAME", key: "bankName", width: 28 },
+        { header: "BRANCH_NAME", key: "branchName", width: 24 },
+        { header: "LC ID", key: "lcId", width: 20 },
+        { header: "LC_VALUE", key: "lcValue", width: 18 },
+        { header: "LC_DATE", key: "lcDate", width: 14 },
+        { header: "LC_EXPIRY_DATE", key: "lcExpiryDate", width: 16 },
+        { header: "EXPORTER_INFO", key: "exporterInfo", width: 30 },
+        { header: "BENEFICIARY_BANK", key: "beneficiaryBank", width: 28 },
+        { header: "ENTRY_DATE", key: "entryDate", width: 14 }
+      ];
+    }
 
     // 4. Style Header Row
     const headerRow = sheet.getRow(1);
     headerRow.height = 28;
-    headerRow.eachCell((cell) => {
+    const valueColIdx = isAllData ? 9 : 7; // LC_VALUE column index
+    headerRow.eachCell((cell, colNumber) => {
       cell.fill = {
         type: "pattern",
         pattern: "solid",
-        fgColor: { argb: "1E293B" } // Navy dark header
+        fgColor: { argb: isAllData ? "581C87" : "1E293B" }
       };
       cell.font = {
         name: "Calibri",
@@ -609,7 +648,7 @@ const exportToExcel = async () => {
       };
       cell.alignment = {
         vertical: "middle",
-        horizontal: cell.col === "5" ? "right" : cell.col === "1" ? "center" : "left",
+        horizontal: colNumber === valueColIdx ? "right" : colNumber === 1 ? "center" : "left",
         wrapText: false
       };
       cell.border = {
@@ -626,20 +665,55 @@ const exportToExcel = async () => {
       const valNum = Number(item.lcValue || 0);
       sumValue += valNum;
 
-      const row = sheet.addRow({
-        sl: index + 1,
-        bankName: item.bankName || "",
-        branchName: item.branchName || "",
-        lcId: item.lcId || "",
-        lcValue: valNum,
-        lcDate: formatDate(item.lcDate),
-        lcExpiryDate: formatDate(item.lcExpiryDate),
-        exporterInfo: item.exporterInfo || "",
-        beneficiaryBank: item.beneficiaryBank || "",
-        beneficiaryName: item.beneficiaryName || "",
-        beneficiaryAddress: item.beneficiaryAddress || "",
-        entryDate: formatDate(item.entryDate)
-      });
+      const row = isAllData
+        ? sheet.addRow({
+            sl: index + 1,
+            bankName: item.bankName || "",
+            branchName: item.branchName || "",
+            adsCode: item.adsCode || "",
+            lcYear: item.lcYear || "",
+            lcNature: item.lcNature || "",
+            lcSerial: item.lcSerial || "",
+            lcId: item.lcId || "",
+            lcValue: valNum,
+            currency: item.currency || "USD",
+            lcDate: formatDate(item.lcDate),
+            lcExpiryDate: formatDate(item.lcExpiryDate),
+            bbUsansePeriod: item.bbUsansePeriod || "",
+            lastShipDate: formatDate(item.lastShipDate),
+            proceedsDate: formatDate(item.proceedsDate),
+            applicantName: item.applicantName || "",
+            irc: item.irc || "",
+            exporterInfo: item.exporterInfo || "",
+            exportLcNumber: item.exportLcNumber || "",
+            beneficiaryBank: item.beneficiaryBank || "",
+            beneficiaryBranch: item.beneficiaryBranch || "",
+            beneficiaryName: item.beneficiaryName || "",
+            beneficiaryAddress: item.beneficiaryAddress || "",
+            beneficiaryIrc: item.beneficiaryIrc || "",
+            beneficiaryErc: item.beneficiaryErc || "",
+            piNumber: item.piNumber || "",
+            piDate: formatDate(item.piDate),
+            bondLicense: item.bondLicense || "",
+            accepted: item.accepted || "",
+            cancelYn: item.cancelYn || "N",
+            cancelCause: item.cancelCause || "",
+            entryDate: formatDate(item.entryDate)
+          })
+        : sheet.addRow({
+            sl: index + 1,
+            beneficiaryName: item.beneficiaryName || "",
+            beneficiaryAddress: item.beneficiaryAddress || "",
+            bankName: item.bankName || "",
+            branchName: item.branchName || "",
+            lcId: item.lcId || "",
+            lcValue: valNum,
+            lcDate: formatDate(item.lcDate),
+            lcExpiryDate: formatDate(item.lcExpiryDate),
+            exporterInfo: item.exporterInfo || "",
+            beneficiaryBank: item.beneficiaryBank || "",
+            entryDate: formatDate(item.entryDate)
+          });
 
       row.height = 20;
 
@@ -647,7 +721,7 @@ const exportToExcel = async () => {
         cell.font = { name: "Calibri", size: 10 };
         cell.alignment = {
           vertical: "middle",
-          horizontal: colNumber === 5 ? "right" : colNumber === 1 ? "center" : "left"
+          horizontal: colNumber === valueColIdx ? "right" : colNumber === 1 ? "center" : "left"
         };
         cell.border = {
           top: { style: "thin", color: { argb: "E2E8F0" } },
@@ -656,27 +730,20 @@ const exportToExcel = async () => {
           right: { style: "thin", color: { argb: "E2E8F0" } }
         };
 
-        if (colNumber === 5) {
+        if (colNumber === valueColIdx) {
           cell.numFmt = "#,##0.00";
         }
       });
     });
 
     // 6. Add Total Summary Row
-    const totalRow = sheet.addRow({
-      sl: "",
-      bankName: "Total",
-      branchName: "",
-      lcId: "",
-      lcValue: sumValue,
-      lcDate: "",
-      lcExpiryDate: "",
-      exporterInfo: "",
-      beneficiaryBank: "",
-      beneficiaryName: "",
-      beneficiaryAddress: "",
-      entryDate: ""
-    });
+    const totalData: any = { sl: "", lcValue: sumValue };
+    if (isAllData) {
+      totalData.bankName = "Total";
+    } else {
+      totalData.beneficiaryName = "Total";
+    }
+    const totalRow = sheet.addRow(totalData);
 
     totalRow.height = 24;
     totalRow.eachCell((cell, colNumber) => {
@@ -688,7 +755,7 @@ const exportToExcel = async () => {
       };
       cell.alignment = {
         vertical: "middle",
-        horizontal: colNumber === 5 ? "right" : "left"
+        horizontal: colNumber === valueColIdx ? "right" : "left"
       };
       cell.border = {
         top: { style: "medium", color: { argb: "475569" } },
@@ -696,7 +763,7 @@ const exportToExcel = async () => {
         bottom: { style: "double", color: { argb: "0F172A" } },
         right: { style: "thin", color: { argb: "CBD5E1" } }
       };
-      if (colNumber === 5) {
+      if (colNumber === valueColIdx) {
         cell.numFmt = "#,##0.00";
       }
     });
@@ -710,7 +777,7 @@ const exportToExcel = async () => {
     const link = document.createElement("a");
     const todayStr = new Date().toISOString().slice(0, 10);
     link.href = url;
-    link.download = `Beneficiary_Report_${todayStr}.xlsx`;
+    link.download = isAllData ? `All_Data_Report_${todayStr}.xlsx` : `Beneficiary_Report_${todayStr}.xlsx`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -993,7 +1060,7 @@ const exportMwToExcel = async () => {
 
 const setActiveTab = (tab: TabType) => {
   activeTab.value = tab;
-  if (tab === "local_lc" && records.value.length === 0) {
+  if ((tab === "local_lc" || tab === "all_data") && records.value.length === 0) {
     fetchLocalLcData(1);
   } else if (tab === "monthwise" && mwRecords.value.length === 0) {
     fetchMonthwiseData();
@@ -1038,7 +1105,20 @@ onMounted(() => {
             </button>
           </li>
 
-          <!-- Tab 3: Monthwise Summary (Amber/Gold Theme) -->
+          <!-- Tab 3: All Data Report (Purple/Indigo Theme) -->
+          <li class="nav-item" role="presentation">
+            <button
+              type="button"
+              class="nav-link report-tab-btn tab-all-data"
+              :class="{ active: activeTab === 'all_data' }"
+              @click="setActiveTab('all_data')"
+            >
+              <i class="bi bi-table me-2 tab-icon-purple"></i>
+              <span>All Data Report</span>
+            </button>
+          </li>
+
+          <!-- Tab 4: Monthwise Summary (Amber/Gold Theme) -->
           <li class="nav-item" role="presentation">
             <button
               type="button"
@@ -1059,8 +1139,8 @@ onMounted(() => {
 
     <!-- Tab Content Area -->
     <div class="tab-content">
-      <!-- 1. Local LC Report Content -->
-      <div v-if="activeTab === 'local_lc'" class="local-lc-tab-pane">
+      <!-- 1 & 3: Beneficiary Report & All Data Report Content -->
+      <div v-if="activeTab === 'local_lc' || activeTab === 'all_data'" class="local-lc-tab-pane">
         <!-- Filter Bar: 4-Column Layout (LC Date Range | Entry Date Range | Beneficiary & Search | Reset & Excel) -->
         <div class="filter-bar mb-3">
           <div class="row g-2 align-items-stretch">
@@ -1261,7 +1341,8 @@ onMounted(() => {
               <span class="small text-muted font-monospace">Loading records...</span>
             </div>
 
-            <table class="table idp-report-table mb-0 align-middle text-nowrap">
+            <!-- Tab 1: Curated Beneficiary Report Table (11 Columns) -->
+            <table v-if="activeTab === 'local_lc'" class="table idp-report-table mb-0 align-middle text-nowrap">
               <thead>
                 <tr>
                   <th class="ps-3 text-center" style="width: 45px;">#</th>
@@ -1283,7 +1364,7 @@ onMounted(() => {
                 <tr v-if="!isLoading && records.length === 0">
                   <td colspan="12" class="text-center py-5 text-muted">
                     <i class="bi bi-inbox display-6 d-block mb-2 text-muted opacity-50"></i>
-                    No Local LC records matched your search / filters.
+                    No Beneficiary records matched your search / filters.
                   </td>
                 </tr>
 
@@ -1308,6 +1389,91 @@ onMounted(() => {
                     {{ row.exporterInfo || '-' }}
                   </td>
                   <td class="cell-muted">{{ row.beneficiaryBank || '-' }}</td>
+                  <td class="pe-3 cell-muted font-monospace">{{ formatDate(row.entryDate) }}</td>
+                </tr>
+              </tbody>
+            </table>
+
+            <!-- Tab 3: Complete All Data Report Table (All 31 Columns) -->
+            <table v-else-if="activeTab === 'all_data'" class="table idp-report-table mb-0 align-middle text-nowrap">
+              <thead>
+                <tr>
+                  <th class="ps-3 text-center" style="width: 45px;">#</th>
+                  <th>BANK_NAME</th>
+                  <th>BRANCH_NAME</th>
+                  <th>ADS_CODE</th>
+                  <th>LC_YEAR</th>
+                  <th>LC_NATURE</th>
+                  <th>LC_SERIAL</th>
+                  <th>LC ID</th>
+                  <th class="text-end">LC_VALUE</th>
+                  <th>CURRENCY</th>
+                  <th>LC_DATE</th>
+                  <th>LC_EXPIRY_DATE</th>
+                  <th>BB_USANSE_PERIOD</th>
+                  <th>LAST_SHIP_DATE</th>
+                  <th>PROCEEDS_DATE</th>
+                  <th>APPLICANT_NAME</th>
+                  <th>IRC</th>
+                  <th>EXPORTER_INFO</th>
+                  <th>EXPORT_LC_NUMBER</th>
+                  <th>BENEFICIARY_BANK</th>
+                  <th>BENEFICIARY_BRANCH</th>
+                  <th>BENEFICIARY_NAME</th>
+                  <th>BENEFICIARY_ADDRESS</th>
+                  <th>BENEFICIARY_IRC</th>
+                  <th>BENEFICIARY_ERC</th>
+                  <th>PI_NUMBER</th>
+                  <th>PI_DATE</th>
+                  <th>BOND_LICENSE</th>
+                  <th>ACCEPTED</th>
+                  <th>CANCEL_YN</th>
+                  <th>CANCEL_CAUSE</th>
+                  <th class="pe-3">ENTRY_DATE</th>
+                </tr>
+              </thead>
+              <tbody>
+                <!-- Empty state -->
+                <tr v-if="!isLoading && records.length === 0">
+                  <td colspan="32" class="text-center py-5 text-muted">
+                    <i class="bi bi-inbox display-6 d-block mb-2 text-muted opacity-50"></i>
+                    No LC records matched your search / filters.
+                  </td>
+                </tr>
+
+                <!-- Data Rows -->
+                <tr v-for="(row, idx) in records" :key="row.id || idx">
+                  <td class="ps-3 text-center cell-num">{{ (currentPage - 1) * pageSize + idx + 1 }}</td>
+                  <td class="cell-main">{{ row.bankName || '-' }}</td>
+                  <td class="cell-muted">{{ row.branchName || '-' }}</td>
+                  <td class="cell-muted font-monospace">{{ row.adsCode || '-' }}</td>
+                  <td class="cell-muted">{{ row.lcYear || '-' }}</td>
+                  <td class="cell-muted">{{ row.lcNature || '-' }}</td>
+                  <td class="cell-muted font-monospace">{{ row.lcSerial || '-' }}</td>
+                  <td class="cell-lc-id font-monospace">{{ row.lcId || '-' }}</td>
+                  <td class="text-end cell-val font-monospace">{{ formatNumber(row.lcValue) }}</td>
+                  <td class="cell-muted">{{ row.currency || 'USD' }}</td>
+                  <td class="cell-muted font-monospace">{{ formatDate(row.lcDate) }}</td>
+                  <td class="cell-muted font-monospace">{{ formatDate(row.lcExpiryDate) }}</td>
+                  <td class="cell-muted">{{ row.bbUsansePeriod || '-' }}</td>
+                  <td class="cell-muted font-monospace">{{ formatDate(row.lastShipDate) }}</td>
+                  <td class="cell-muted font-monospace">{{ formatDate(row.proceedsDate) }}</td>
+                  <td class="cell-muted" style="max-width: 180px;" :title="row.applicantName || ''">{{ row.applicantName || '-' }}</td>
+                  <td class="cell-muted font-monospace">{{ row.irc || '-' }}</td>
+                  <td class="cell-muted text-truncate" style="max-width: 180px;" :title="row.exporterInfo || ''">{{ row.exporterInfo || '-' }}</td>
+                  <td class="cell-muted font-monospace">{{ row.exportLcNumber || '-' }}</td>
+                  <td class="cell-muted">{{ row.beneficiaryBank || '-' }}</td>
+                  <td class="cell-muted">{{ row.beneficiaryBranch || '-' }}</td>
+                  <td class="cell-main fw-medium text-truncate" style="max-width: 180px;" :title="row.beneficiaryName || ''">{{ row.beneficiaryName || '-' }}</td>
+                  <td class="cell-muted text-truncate" style="max-width: 200px;" :title="row.beneficiaryAddress || ''">{{ row.beneficiaryAddress || '-' }}</td>
+                  <td class="cell-muted font-monospace">{{ row.beneficiaryIrc || '-' }}</td>
+                  <td class="cell-muted font-monospace">{{ row.beneficiaryErc || '-' }}</td>
+                  <td class="cell-muted font-monospace">{{ row.piNumber || '-' }}</td>
+                  <td class="cell-muted font-monospace">{{ formatDate(row.piDate) }}</td>
+                  <td class="cell-muted font-monospace">{{ row.bondLicense || '-' }}</td>
+                  <td class="cell-muted">{{ row.accepted || '-' }}</td>
+                  <td class="cell-muted text-center font-monospace">{{ row.cancelYn || 'N' }}</td>
+                  <td class="cell-muted">{{ row.cancelCause || '-' }}</td>
                   <td class="pe-3 cell-muted font-monospace">{{ formatDate(row.entryDate) }}</td>
                 </tr>
               </tbody>
@@ -2080,7 +2246,31 @@ onMounted(() => {
   color: #6ee7b7;
 }
 
-/* 3. Monthwise Summary Tab (Amber/Gold Theme) */
+/* 3. All Data Report Tab (Purple/Indigo Theme) */
+.tab-all-data .tab-icon-purple {
+  color: #c084fc;
+  transition: transform 0.2s ease;
+}
+
+.tab-all-data:hover {
+  color: #f3e8ff;
+  background: rgba(168, 85, 247, 0.08);
+  border-color: rgba(168, 85, 247, 0.2);
+}
+
+.tab-all-data.active {
+  background: linear-gradient(135deg, rgba(168, 85, 247, 0.25) 0%, rgba(15, 23, 42, 0.95) 100%) !important;
+  color: #c084fc !important;
+  border-color: #9333ea !important;
+  box-shadow: 0 2px 10px rgba(168, 85, 247, 0.3);
+}
+
+.tab-all-data.active .tab-icon-purple {
+  transform: scale(1.1);
+  color: #e9d5ff;
+}
+
+/* 4. Monthwise Summary Tab (Amber/Gold Theme) */
 .tab-monthwise .tab-icon-amber {
   color: #fbbf24;
   transition: transform 0.2s ease;
