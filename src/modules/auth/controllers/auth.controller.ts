@@ -24,7 +24,7 @@ import {
 } from "./auth.helpers.js";
 
 /**
- * 1. User Registration (Direct signup - awaits Admin approval)
+ * 1. User Registration (Initiates Signup & sends 6-digit Email OTP)
  * Route: POST /auth/register
  */
 export const register: Handler = async (c: any) => {
@@ -36,7 +36,7 @@ export const register: Handler = async (c: any) => {
       where: eq(users.email, cleanEmail)
     });
 
-    if (existingUser) {
+    if (existingUser && existingUser.emailVerifiedAt) {
       return c.json({ message: "An account with this email already exists" }, HttpStatusCodes.UNPROCESSABLE_ENTITY);
     }
 
@@ -49,37 +49,47 @@ export const register: Handler = async (c: any) => {
       defaultRole = newRole;
     }
 
-    const [insertedUser] = await db
-      .insert(users)
-      .values({
+    const hashedPassword = await password.hashPassword(body.password);
+
+    if (existingUser && !existingUser.emailVerifiedAt) {
+      await db
+        .update(users)
+        .set({
+          name: body.name.trim(),
+          password: hashedPassword,
+          roleId: defaultRole?.id ?? null,
+          status: "pending",
+          billingCycleDays: 30,
+          updatedAt: new Date()
+        })
+        .where(eq(users.id, existingUser.id));
+    } else {
+      await db.insert(users).values({
         name: body.name.trim(),
         email: cleanEmail,
-        password: await password.hashPassword(body.password),
+        password: hashedPassword,
         roleId: defaultRole?.id ?? null,
         status: "pending",
         billingCycleDays: 30,
         subscriptionExpiresAt: null,
-        emailVerifiedAt: new Date(),
+        emailVerifiedAt: null,
         createdAt: new Date(),
         updatedAt: new Date()
-      })
-      .returning();
+      });
+    }
 
-    const user = await db.query.users.findFirst({
-      where: eq(users.id, insertedUser.id),
-      with: { role: true }
-    });
+    // Generate & Dispatch Signup OTP (Valid 10 minutes)
+    const otp = await generateAndSaveOtp(cleanEmail, "signup", 10);
+    await mail.sendSignupOtpMail(cleanEmail, body.name.trim(), otp);
 
     return c.json(
       {
         success: true,
-        isPendingApproval: true,
-        message: "Registration successful! Your account has been created and is awaiting Administrator approval. You will receive 30-day access once approved.",
-        data: {
-          user: sanitizeUser(user)
-        }
+        requireOtp: true,
+        email: cleanEmail,
+        message: "A 6-digit verification code has been sent to your email. Please enter the code to complete registration."
       },
-      HttpStatusCodes.CREATED
+      HttpStatusCodes.OK
     );
   } catch (error) {
     console.error("Register error:", error);
@@ -98,7 +108,7 @@ export const verifySignupOtp: Handler = async (c: any) => {
 
     const validation = await validateAndBurnOtp(cleanEmail, body.otp, "signup");
     if (!validation.valid) {
-      return c.json({ message: validation.message || "Invalid verification code" }, HttpStatusCodes.UNPROCESSABLE_ENTITY);
+      return c.json({ message: validation.message || "Invalid or expired verification code" }, HttpStatusCodes.UNPROCESSABLE_ENTITY);
     }
 
     const user = await db.query.users.findFirst({
@@ -110,7 +120,7 @@ export const verifySignupOtp: Handler = async (c: any) => {
       return c.json({ message: "User account not found" }, HttpStatusCodes.NOT_FOUND);
     }
 
-    // Mark user as verified
+    // Mark user email as verified
     await db
       .update(users)
       .set({ emailVerifiedAt: new Date(), updatedAt: new Date() })
@@ -118,8 +128,9 @@ export const verifySignupOtp: Handler = async (c: any) => {
 
     return c.json(
       {
-        message: "Email verified successfully! Your account is awaiting Administrator approval.",
+        success: true,
         isPendingApproval: true,
+        message: "Email verified successfully! Your account has been submitted and is awaiting Administrator approval.",
         data: {
           user: sanitizeUser(user)
         }
@@ -133,7 +144,7 @@ export const verifySignupOtp: Handler = async (c: any) => {
 };
 
 /**
- * 3. User Login - Validates Credentials, Approval Status & 30-Day Billing Cycle
+ * 3. User Login - Validates Credentials, Status, and Dispatches 2FA Login OTP
  * Route: POST /auth/login
  */
 export const login: Handler = async (c: any) => {
@@ -190,19 +201,16 @@ export const login: Handler = async (c: any) => {
       }
     }
 
-    await revokeCurrentRefreshToken(c);
-    const tokens = await issueTokens(c, user, { remember: !!body.remember });
+    // Generate & Dispatch 2FA Login OTP (Valid 5 minutes)
+    const otp = await generateAndSaveOtp(cleanEmail, "login", 5);
+    await mail.sendLoginOtpMail(cleanEmail, user.name, otp);
 
     return c.json(
       {
-        message: "Login successful! Welcome to Jupiter.",
-        requireOtp: false,
-        data: {
-          user: sanitizeUser(user),
-          access_token: tokens.accessToken,
-          refresh_token: tokens.refreshToken,
-          token_type: "Bearer"
-        }
+        success: true,
+        requireOtp: true,
+        email: cleanEmail,
+        message: "A 6-digit login security code has been sent to your email."
       },
       HttpStatusCodes.OK
     );
@@ -213,7 +221,7 @@ export const login: Handler = async (c: any) => {
 };
 
 /**
- * 4. Verify 2FA Login OTP
+ * 4. Verify 2FA Login OTP and Issue JWT Tokens
  * Route: POST /auth/verify-login-otp
  */
 export const verifyLoginOtp: Handler = async (c: any) => {
@@ -221,7 +229,7 @@ export const verifyLoginOtp: Handler = async (c: any) => {
     const body = c.req.valid("json");
     const cleanEmail = body.email.toLowerCase().trim();
 
-    // Verify OTP with max attempts / anti-fake protection
+    // Verify OTP with single-use & brute-force protection
     const validation = await validateAndBurnOtp(cleanEmail, body.otp, "login");
     if (!validation.valid) {
       return c.json({ message: validation.message || "Invalid or expired login code" }, HttpStatusCodes.UNPROCESSABLE_ENTITY);
@@ -246,7 +254,7 @@ export const verifyLoginOtp: Handler = async (c: any) => {
 
     return c.json(
       {
-        message: "Login successful! Welcome back.",
+        message: "Login successful! Welcome to Jupiter.",
         data: {
           user: sanitizeUser(user),
           access_token: tokens.accessToken,
@@ -332,7 +340,7 @@ export const forgotPassword: Handler = async (c: any) => {
 };
 
 /**
- * 7. Reset Password with 6-digit OTP & Anti-Brute-Force Protection
+ * 7. Reset Password with 6-digit OTP
  * Route: POST /auth/reset-password
  */
 export const resetPassword: Handler = async (c: any) => {
@@ -340,7 +348,6 @@ export const resetPassword: Handler = async (c: any) => {
     const body = c.req.valid("json");
     const cleanEmail = body.email.toLowerCase().trim();
 
-    // Validate OTP
     const validation = await validateAndBurnOtp(cleanEmail, body.otp, "reset_password");
     if (!validation.valid) {
       return c.json({ message: validation.message || "Invalid or expired reset code" }, HttpStatusCodes.UNPROCESSABLE_ENTITY);
@@ -354,7 +361,6 @@ export const resetPassword: Handler = async (c: any) => {
       return c.json({ message: "User account not found" }, HttpStatusCodes.NOT_FOUND);
     }
 
-    // Update password
     await db
       .update(users)
       .set({
@@ -363,7 +369,6 @@ export const resetPassword: Handler = async (c: any) => {
       })
       .where(eq(users.id, user.id));
 
-    // Revoke all existing login sessions
     await db.update(refreshTokens).set({ revoked: 1 }).where(eq(refreshTokens.userId, user.id));
 
     return c.json(
@@ -377,7 +382,7 @@ export const resetPassword: Handler = async (c: any) => {
 };
 
 /**
- * 8. Legacy Email Verification (Supports OTP or Token)
+ * 8. Email Verification
  * Route: POST /auth/verify-email
  */
 export const verifyEmail: Handler = async (c: any) => {
@@ -413,9 +418,8 @@ export const verifyEmail: Handler = async (c: any) => {
 };
 
 /**
- * Why: Rotates refresh token and reissues access credentials.
- * When: Used when access token expires but refresh token is still valid.
- * Where: POST auth refresh-token route.
+ * 9. Refresh Token
+ * Route: POST /auth/refresh-token
  */
 export const refreshToken: Handler = async (c: any) => {
   try {
@@ -449,78 +453,84 @@ export const refreshToken: Handler = async (c: any) => {
       {
         id: user.id,
         email: user.email,
-        roleId: user.role?.id,
-        role: user.role?.name,
-        remember
+        role: user.role?.name || "user"
       },
       "access"
     );
+
     const newRefreshToken = await jwt.generateToken(
       {
         id: user.id,
         email: user.email,
-        roleId: user.role?.id,
-        role: user.role?.name,
+        role: user.role?.name || "user",
         remember
       },
       "refresh",
       refreshExpiry
     );
 
-    await db
-      .update(refreshTokens)
-      .set({
-        jti: newRefreshToken.jti as string,
-        expiresAt: new Date(newRefreshToken.exp * 1000),
+    await db.update(refreshTokens).set({ revoked: 1 }).where(eq(refreshTokens.id, storedToken.id));
+
+    const newPayload = await jwt.verifyToken(newRefreshToken, "refresh");
+    const expiresAt = new Date(Date.now() + (refreshExpiry || jwtConfig.refreshExpirySeconds) * 1000);
+
+    if (newPayload?.jti) {
+      await db.insert(refreshTokens).values({
+        userId: user.id,
+        jti: newPayload.jti as string,
+        expiresAt,
         revoked: 0
-      })
-      .where(eq(refreshTokens.id, storedToken.id));
+      });
+    }
 
-    await cookie.setAuth(c, accessToken.token);
-    await cookie.setRefresh(c, newRefreshToken.token, refreshExpiry);
-
-    return c.json(
-      {
-        message: "Token refreshed successfully",
-        data: {
-          user: sanitizeUser(user),
-          access_token: accessToken.token,
-          refresh_token: newRefreshToken.token,
-          token_type: "Bearer"
-        }
-      },
-      HttpStatusCodes.OK
-    );
+    return c.json({
+      access_token: accessToken,
+      refresh_token: newRefreshToken,
+      token_type: "Bearer"
+    });
   } catch (error) {
     console.error("Refresh token error:", error);
-    return c.json({ message: "Invalid or expired refresh token" }, HttpStatusCodes.UNAUTHORIZED);
+    return c.json({ message: "Failed to refresh token" }, HttpStatusCodes.UNAUTHORIZED);
   }
 };
 
+/**
+ * 10. Get Current Authenticated User
+ * Route: GET /auth/me
+ */
 export const me: Handler = async (c: any) => {
   try {
     const auth = c.get("auth");
-    if (!auth?.id) return c.json({ message: "Unauthorized" }, HttpStatusCodes.UNAUTHORIZED);
+    if (!auth?.id) {
+      return c.json({ message: "Unauthorized" }, HttpStatusCodes.UNAUTHORIZED);
+    }
 
     const user = await db.query.users.findFirst({
       where: eq(users.id, Number(auth.id)),
       with: { role: true }
     });
 
-    if (!user) return c.json({ message: "User not found" }, HttpStatusCodes.UNAUTHORIZED);
+    if (!user) {
+      return c.json({ message: "User not found" }, HttpStatusCodes.NOT_FOUND);
+    }
 
-    return c.json({ message: "Authenticated user", data: sanitizeUser(user) }, HttpStatusCodes.OK);
+    return c.json({
+      data: sanitizeUser(user)
+    });
   } catch (error) {
     console.error("Me error:", error);
-    return c.json({ message: "Failed to fetch user" }, HttpStatusCodes.INTERNAL_SERVER_ERROR);
+    return c.json({ message: "Failed to get user profile" }, HttpStatusCodes.INTERNAL_SERVER_ERROR);
   }
 };
 
+/**
+ * 11. Logout
+ * Route: POST /auth/logout
+ */
 export const logout: Handler = async (c: any) => {
   try {
     await revokeCurrentRefreshToken(c);
-    cookie.deleteAuth(c);
-    cookie.deleteRefresh(c);
+    cookie.clear(c, "refresh_token");
     return c.json({ message: "Logged out successfully" }, HttpStatusCodes.OK);
   } catch (error) {
     console.error("Logout error:", error);
@@ -529,23 +539,19 @@ export const logout: Handler = async (c: any) => {
 };
 
 /**
- * Why: Revokes all refresh tokens for account-wide logout.
- * When: Used for "logout from all devices" security action.
- * Where: POST auth logout-all-devices route.
+ * 12. Logout All Devices
+ * Route: POST /auth/logout-all
  */
 export const logoutAllDevices: Handler = async (c: any) => {
   try {
     const auth = c.get("auth");
-
-    if (!auth) return c.json({ message: "Unauthorized" }, HttpStatusCodes.UNAUTHORIZED);
-
-    await db.delete(refreshTokens).where(eq(refreshTokens.userId, auth.id));
-    cookie.deleteAuth(c);
-    cookie.deleteRefresh(c);
-
-    return c.json({ message: "Logged out from all devices successfully" }, HttpStatusCodes.OK);
+    if (auth?.id) {
+      await db.update(refreshTokens).set({ revoked: 1 }).where(eq(refreshTokens.userId, Number(auth.id)));
+    }
+    cookie.clear(c, "refresh_token");
+    return c.json({ message: "Logged out from all devices" }, HttpStatusCodes.OK);
   } catch (error) {
     console.error("Logout all devices error:", error);
-    return c.json({ message: "Failed to logout from all devices" }, HttpStatusCodes.INTERNAL_SERVER_ERROR);
+    return c.json({ message: "Failed to logout all devices" }, HttpStatusCodes.INTERNAL_SERVER_ERROR);
   }
 };

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from "vue";
+import { ref, computed, onUnmounted, nextTick } from "vue";
 import { useRouter } from "vue-router";
 import { useAuthStore } from "@/stores/auth";
 import { useToast } from "@/composables/useToast";
@@ -13,6 +13,61 @@ const loginId = ref("");
 const password = ref("");
 const showPassword = ref(false);
 const isSubmitting = ref(false);
+
+// OTP Verification Step for Login
+const isOtpStep = ref(false);
+const loginOtp = ref("");
+const otpInputRef = ref<HTMLInputElement | null>(null);
+
+// OTP Timers
+const otpSecondsRemaining = ref(300);
+let otpTimer: any = null;
+const resendCooldown = ref(0);
+let cooldownTimer: any = null;
+
+const formattedTimeRemaining = computed(() => {
+  const m = Math.floor(otpSecondsRemaining.value / 60);
+  const s = otpSecondsRemaining.value % 60;
+  return `${m}:${s < 10 ? "0" : ""}${s}`;
+});
+
+function startOtpCountdown() {
+  stopOtpCountdown();
+  otpSecondsRemaining.value = 300;
+  otpTimer = setInterval(() => {
+    if (otpSecondsRemaining.value > 0) {
+      otpSecondsRemaining.value--;
+    } else {
+      stopOtpCountdown();
+      toast.error("Login code expired. Please request a new code.");
+    }
+  }, 1000);
+}
+
+function stopOtpCountdown() {
+  if (otpTimer) {
+    clearInterval(otpTimer);
+    otpTimer = null;
+  }
+}
+
+function startResendCooldown() {
+  resendCooldown.value = 60;
+  if (cooldownTimer) clearInterval(cooldownTimer);
+  cooldownTimer = setInterval(() => {
+    if (resendCooldown.value > 0) {
+      resendCooldown.value--;
+    } else {
+      clearInterval(cooldownTimer);
+      cooldownTimer = null;
+    }
+  }, 1000);
+}
+
+onUnmounted(() => {
+  stopOtpCountdown();
+  if (cooldownTimer) clearInterval(cooldownTimer);
+});
 
 // Platform stats
 const platformStats = ref({
@@ -37,24 +92,82 @@ const handleLogin = async () => {
   }
   isSubmitting.value = true;
   try {
-    await authStore.login({
+    const res = await authStore.login({
       email: loginId.value.trim(),
       password: password.value,
       remember: true
     });
 
-    toast.success("Signed in successfully!");
-    const roleName = String((authStore.user as any)?.role?.name || (authStore.user as any)?.role || "").toLowerCase();
-    const isAdmin = roleName === "superadmin" || roleName === "admin";
-    const defaultPath = isAdmin ? "/users" : "/";
-    const redirectPath = (router.currentRoute.value.query.redirect as string) || defaultPath;
-    router.push(isAdmin ? "/users" : redirectPath);
+    if (res.requireOtp) {
+      isOtpStep.value = true;
+      loginOtp.value = "";
+      toast.info(res.message || "A 6-digit login security code has been sent to your email.");
+      startOtpCountdown();
+      startResendCooldown();
+      nextTick(() => {
+        otpInputRef.value?.focus();
+      });
+      return;
+    }
+
+    completeLoginSuccess();
   } catch (err: any) {
     toast.error(err?.message || "Invalid email or password. Please check your credentials.");
   } finally {
     isSubmitting.value = false;
   }
 };
+
+const handleVerifyLoginOtp = async () => {
+  const code = loginOtp.value.trim();
+  if (!code || code.length !== 6) {
+    toast.error("Please enter the complete 6-digit security code.");
+    return;
+  }
+  isSubmitting.value = true;
+  try {
+    await authStore.verifyLoginOtp({
+      email: loginId.value.trim(),
+      otp: code,
+      remember: true
+    });
+
+    stopOtpCountdown();
+    completeLoginSuccess();
+  } catch (err: any) {
+    toast.error(err?.message || "Invalid or expired security code.");
+  } finally {
+    isSubmitting.value = false;
+  }
+};
+
+const handleResendLoginOtp = async () => {
+  if (resendCooldown.value > 0 || isSubmitting.value) return;
+  isSubmitting.value = true;
+  try {
+    const msg = await authStore.resendOtp({
+      email: loginId.value.trim(),
+      type: "login"
+    });
+    toast.success(msg || "A fresh security code has been sent to your email.");
+    loginOtp.value = "";
+    startOtpCountdown();
+    startResendCooldown();
+  } catch (err: any) {
+    toast.error(err?.message || "Failed to resend security code.");
+  } finally {
+    isSubmitting.value = false;
+  }
+};
+
+function completeLoginSuccess() {
+  toast.success("Signed in successfully!");
+  const roleName = String((authStore.user as any)?.role?.name || (authStore.user as any)?.role || "").toLowerCase();
+  const isAdmin = roleName === "superadmin" || roleName === "admin";
+  const defaultPath = isAdmin ? "/users" : "/";
+  const redirectPath = (router.currentRoute.value.query.redirect as string) || defaultPath;
+  router.push(isAdmin ? "/users" : redirectPath);
+}
 
 const handleRequestOtp = async () => {
   if (!resetEmail.value) {
@@ -63,19 +176,13 @@ const handleRequestOtp = async () => {
   }
   isSendingOtp.value = true;
   try {
-    const res = await axios.post("/api/auth/forgot-password-request", {
-      email: resetEmail.value.trim()
-    });
-    if (res.data?.success) {
-      toast.success(res.data?.message || "OTP sent to your email!");
-      resetOtp.value = "";
-      newPassword.value = "";
-      resetStep.value = 2;
-    } else {
-      toast.error(res.data?.error || res.data?.message || "Failed to send OTP.");
-    }
+    const msg = await authStore.forgotPassword(resetEmail.value.trim());
+    toast.success(msg || "Reset code sent to your email!");
+    resetOtp.value = "";
+    newPassword.value = "";
+    resetStep.value = 2;
   } catch (err: any) {
-    toast.error(err?.response?.data?.message || err?.message || "Error requesting OTP.");
+    toast.error(err?.message || "Error requesting reset code.");
   } finally {
     isSendingOtp.value = false;
   }
@@ -83,7 +190,7 @@ const handleRequestOtp = async () => {
 
 const handleResetPassword = async () => {
   const otpClean = resetOtp.value.trim();
-  if (!otpClean || otpClean.length < 4) {
+  if (!otpClean || otpClean.length !== 6) {
     toast.error("Please enter the 6-digit OTP code received in your email.");
     return;
   }
@@ -93,23 +200,20 @@ const handleResetPassword = async () => {
   }
   isSubmitting.value = true;
   try {
-    const res = await axios.post("/api/auth/forgot-password-reset", {
+    const msg = await authStore.resetPasswordWithOtp({
       email: resetEmail.value.trim(),
       otp: otpClean,
-      newPassword: newPassword.value
+      password: newPassword.value,
+      password_confirmation: newPassword.value
     });
-    if (res.data?.success) {
-      toast.success(res.data?.message || "Password reset successfully! Please sign in.");
-      isForgotPassword.value = false;
-      resetStep.value = 1;
-      resetOtp.value = "";
-      newPassword.value = "";
-      password.value = "";
-    } else {
-      toast.error(res.data?.error || res.data?.message || "Invalid OTP or reset failed.");
-    }
+    toast.success(msg || "Password reset successfully! Please sign in.");
+    isForgotPassword.value = false;
+    resetStep.value = 1;
+    resetOtp.value = "";
+    newPassword.value = "";
+    password.value = "";
   } catch (err: any) {
-    toast.error(err?.response?.data?.message || err?.message || "Error resetting password.");
+    toast.error(err?.message || "Invalid OTP or reset failed.");
   } finally {
     isSubmitting.value = false;
   }
@@ -145,7 +249,10 @@ const handleResetPassword = async () => {
                 <ellipse cx="16" cy="16" rx="14" ry="5.2" stroke="url(#ringLogGrad)" stroke-width="1.8" transform="rotate(-22 16 16)" stroke-linecap="round" />
               </svg>
             </div>
-            <span class="brand-name">Jupiter</span>
+            <div>
+              <div class="brand-name">Jupiter</div>
+              <div class="brand-sub">Analytics &amp; Intelligence</div>
+            </div>
           </div>
 
           <!-- Headline -->
@@ -212,8 +319,73 @@ const handleResetPassword = async () => {
         </div>
 
         <div class="form-panel">
-          <!-- Login Form -->
-          <template v-if="!isForgotPassword">
+          <!-- ========================================== -->
+          <!-- STEP 2: 2FA LOGIN OTP VERIFICATION         -->
+          <!-- ========================================== -->
+          <template v-if="isOtpStep">
+            <div class="form-header text-center">
+              <div class="form-step-badge">2FA Security</div>
+              <h2>Enter Security Code</h2>
+              <p>We sent a 6-digit code to <strong class="text-light">{{ loginId }}</strong></p>
+            </div>
+
+            <form @submit.prevent="handleVerifyLoginOtp" class="login-form">
+              <div class="field-group text-center">
+                <input
+                  ref="otpInputRef"
+                  v-model="loginOtp"
+                  type="text"
+                  class="login-input otp-input"
+                  placeholder="••••••"
+                  maxlength="6"
+                  autocomplete="one-time-code"
+                  inputmode="numeric"
+                  required
+                  autofocus
+                />
+                <div class="field-hint text-center mt-1">
+                  <i class="bi bi-clock-history me-1"></i>
+                  Code expires in <strong class="text-info">{{ formattedTimeRemaining }}</strong>
+                </div>
+              </div>
+
+              <button
+                type="submit"
+                class="btn-login"
+                :disabled="isSubmitting || loginOtp.length !== 6"
+              >
+                <span v-if="isSubmitting" class="spinner-border spinner-border-sm me-2" role="status"></span>
+                <i v-else class="bi bi-shield-check-fill me-2"></i>
+                {{ isSubmitting ? 'Verifying...' : 'Verify & Sign In' }}
+              </button>
+
+              <div class="text-center pt-1">
+                <button
+                  type="button"
+                  class="resend-link-btn"
+                  :disabled="resendCooldown > 0 || isSubmitting"
+                  @click="handleResendLoginOtp"
+                >
+                  <i class="bi bi-arrow-repeat me-1"></i>
+                  <span v-if="resendCooldown > 0">Resend Code in {{ resendCooldown }}s</span>
+                  <span v-else>Didn't receive code? Resend</span>
+                </button>
+              </div>
+
+              <button
+                type="button"
+                class="back-btn"
+                @click="isOtpStep = false; loginOtp = ''; stopOtpCountdown();"
+              >
+                <i class="bi bi-arrow-left me-1"></i> Back to Email &amp; Password
+              </button>
+            </form>
+          </template>
+
+          <!-- ========================================== -->
+          <!-- STEP 1: REGULAR LOGIN FORM                 -->
+          <!-- ========================================== -->
+          <template v-else-if="!isForgotPassword">
             <div class="form-header">
               <div class="form-step-badge">Secure System</div>
               <h2>Welcome back</h2>
@@ -289,7 +461,9 @@ const handleResetPassword = async () => {
             </form>
           </template>
 
-          <!-- Forgot Password Workflow -->
+          <!-- ========================================== -->
+          <!-- FORGOT PASSWORD WORKFLOW                   -->
+          <!-- ========================================== -->
           <template v-else>
             <div class="form-header">
               <div class="form-step-badge">{{ resetStep === 1 ? 'Step 1 of 2' : 'Step 2 of 2' }}</div>
@@ -333,11 +507,10 @@ const handleResetPassword = async () => {
                   v-model="resetOtp"
                   type="text"
                   class="login-input otp-input"
-                  placeholder="——————"
+                  placeholder="••••••"
                   maxlength="6"
                   autocomplete="one-time-code"
                   inputmode="numeric"
-                  pattern="[0-9]*"
                   required
                 />
               </div>
@@ -458,26 +631,34 @@ const handleResetPassword = async () => {
 .brand-name {
   font-size: 1.65rem;
   font-weight: 800;
-  letter-spacing: -0.02em;
-  color: #ffffff !important;
+  color: #f8fafc;
+  line-height: 1.1;
+  letter-spacing: -0.5px;
+}
+.brand-sub {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: #38bdf8;
+  letter-spacing: 0.8px;
+  text-transform: uppercase;
 }
 
 .brand-headline h1 {
-  font-size: 2.1rem;
+  font-size: 1.85rem;
   font-weight: 800;
-  line-height: 1.25;
   color: #f8fafc;
+  line-height: 1.25;
+  letter-spacing: -0.5px;
   margin: 0;
-  letter-spacing: -0.4px;
 }
 
 .feature-list {
   list-style: none;
-  margin: 0;
   padding: 0;
+  margin: 0;
   display: flex;
   flex-direction: column;
-  gap: 0.8rem;
+  gap: 0.85rem;
 }
 .feature-list li {
   display: flex;
@@ -493,10 +674,10 @@ const handleResetPassword = async () => {
   border-radius: 50%;
   flex-shrink: 0;
 }
-.dot-blue   { background-color: #3b82f6; }
-.dot-purple { background-color: #a855f7; }
-.dot-cyan   { background-color: #06b6d4; }
-.dot-emerald{ background-color: #10b981; }
+.dot-blue    { background: #38bdf8; box-shadow: 0 0 8px #38bdf8; }
+.dot-purple  { background: #c084fc; box-shadow: 0 0 8px #c084fc; }
+.dot-cyan    { background: #22d3ee; box-shadow: 0 0 8px #22d3ee; }
+.dot-emerald { background: #34d399; box-shadow: 0 0 8px #34d399; }
 
 .stat-strip {
   display: flex;
@@ -567,16 +748,6 @@ const handleResetPassword = async () => {
   display: none;
   text-align: center;
   margin-bottom: 1rem;
-}
-.brand-icon-sm {
-  width: 32px;
-  height: 32px;
-  background: #2563eb;
-  border-radius: 8px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: #fff;
 }
 .brand-name-sm {
   font-size: 1.15rem;
@@ -671,122 +842,130 @@ const handleResetPassword = async () => {
 
 .login-input {
   width: 100%;
-  background: rgba(2, 6, 23, 0.6);
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 10px;
-  padding: 0.68rem 1rem 0.68rem 2.4rem;
-  color: #f8fafc;
-  font-size: 0.9rem;
-  transition: all 0.2s ease;
-}
-.login-input:focus {
+  background: rgba(2, 6, 23, 0.6) !important;
+  border: 1px solid rgba(255, 255, 255, 0.12) !important;
+  border-radius: 10px !important;
+  padding: 0.68rem 1rem 0.68rem 2.4rem !important;
+  color: #f8fafc !important;
+  font-size: 0.9rem !important;
   outline: none;
-  border-color: #3b82f6;
-  background: rgba(2, 6, 23, 0.8);
-  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.18);
+  box-sizing: border-box;
 }
 .login-input::placeholder {
-  color: #475569;
+  color: #475569 !important;
+}
+.login-input:focus {
+  border-color: #38bdf8 !important;
+  background: rgba(2, 6, 23, 0.85) !important;
+  box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.2) !important;
 }
 
 .login-input-password {
-  padding-right: 2.8rem !important;
+  padding-right: 2.5rem !important;
+}
+
+.otp-input {
+  padding: 0.75rem !important;
+  font-family: monospace;
+  font-size: 1.5rem !important;
+  font-weight: 800;
+  text-align: center;
+  letter-spacing: 0.45em;
+  color: #38bdf8 !important;
 }
 
 .field-eye-btn {
   position: absolute;
-  right: 10px;
-  top: 50%;
-  transform: translateY(-50%);
-  background: transparent;
+  right: 8px;
+  background: none;
   border: none;
   color: #94a3b8;
-  cursor: pointer;
   padding: 4px 6px;
-  font-size: 1.15rem;
+  cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 4;
-  transition: color 0.15s ease;
+  font-size: 1rem;
 }
 .field-eye-btn:hover {
   color: #38bdf8;
 }
 
-.otp-input {
-  text-align: center;
-  font-size: 1.3rem;
-  letter-spacing: 8px;
-  padding-left: 1rem;
+.field-hint {
+  font-size: 0.72rem;
+  color: #64748b;
 }
 
 .btn-login {
   width: 100%;
-  background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
-  border: 1px solid rgba(255, 255, 255, 0.15);
-  border-radius: 10px;
-  padding: 0.72rem 1.2rem;
-  color: #fff;
-  font-size: 0.92rem;
-  font-weight: 600;
-  cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: all 0.2s ease;
-  box-shadow: 0 4px 14px rgba(37, 99, 235, 0.4);
+  padding: 0.72rem 1.2rem;
+  background: linear-gradient(135deg, #2563eb, #1d4ed8);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 10px;
+  color: #ffffff;
+  font-size: 0.92rem;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: 0 4px 14px rgba(37, 99, 235, 0.35);
+  transition: opacity 0.2s ease;
 }
 .btn-login:hover:not(:disabled) {
-  background: linear-gradient(135deg, #1d4ed8 0%, #1e40af 100%);
-  box-shadow: 0 6px 18px rgba(37, 99, 235, 0.5);
-  transform: translateY(-1px);
+  opacity: 0.95;
 }
 .btn-login:disabled {
-  opacity: 0.6;
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.resend-link-btn {
+  background: none;
+  border: none;
+  color: #38bdf8;
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+.resend-link-btn:hover:not(:disabled) {
+  text-decoration: underline;
+}
+.resend-link-btn:disabled {
+  color: #64748b;
   cursor: not-allowed;
 }
 
 .back-btn {
-  background: transparent;
+  background: none;
   border: none;
-  color: #64748b;
+  color: #94a3b8;
   font-size: 0.82rem;
-  margin-top: 1rem;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 100%;
+  gap: 4px;
 }
 .back-btn:hover {
-  color: #94a3b8;
+  color: #38bdf8;
 }
 
 .login-footer-note {
-  font-size: 0.76rem;
+  font-size: 0.75rem;
   color: #64748b;
   display: flex;
   align-items: center;
-  justify-content: center;
 }
 
 @media (max-width: 900px) {
-  .login-left,
-  .login-center-divider {
-    display: none;
-  }
-  .login-wrapper {
-    justify-content: center;
-    padding: 1.5rem 1rem;
-  }
+  .login-left { display: none; }
+  .login-center-divider { display: none; }
   .login-right {
-    padding: 0;
+    flex: 1;
+    padding: 1rem;
     width: 100%;
-    max-width: 400px;
   }
-  .mobile-brand-header {
-    display: block;
-  }
+  .mobile-brand-header { display: block; }
 }
 </style>

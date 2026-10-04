@@ -23,7 +23,11 @@
             </svg>
           </div>
           <h2 class="brand-title">Jupiter</h2>
-          <div class="form-badge">{{ isPendingStep ? 'Registration Submitted' : 'Create New Account' }}</div>
+          <div class="form-badge">
+            <span v-if="currentStep === 1">Create New Account</span>
+            <span v-else-if="currentStep === 2">Verify Email Address</span>
+            <span v-else>Registration Submitted</span>
+          </div>
         </div>
 
         <!-- Alert Message -->
@@ -33,28 +37,89 @@
           <button type="button" class="alert-close" @click="errorMessage = ''">&times;</button>
         </div>
 
-        <div v-if="successMessage && !isPendingStep" class="auth-alert alert-success">
+        <div v-if="successMessage && currentStep !== 3" class="auth-alert alert-success">
           <i class="bi bi-check-circle-fill flex-shrink-0"></i>
           <span>{{ successMessage }}</span>
           <button type="button" class="alert-close" @click="successMessage = ''">&times;</button>
         </div>
 
         <!-- ========================================== -->
-        <!-- PENDING APPROVAL CONFIRMATION SCREEN       -->
+        <!-- STEP 3: PENDING APPROVAL CONFIRMATION       -->
         <!-- ========================================== -->
-        <div v-if="isPendingStep" class="text-center py-2">
+        <div v-if="currentStep === 3" class="text-center py-2">
           <div class="pending-icon-wrap mb-3">
             <i class="bi bi-hourglass-split"></i>
           </div>
           <h4 class="fw-bold text-white mb-2">Registration Submitted!</h4>
           <p class="text-secondary small mb-4 px-2">
-            Your account for <strong class="text-light">{{ email }}</strong> has been registered and is awaiting approval by the Administrator. Once approved, your 30-day billing cycle will be activated.
+            Your email <strong class="text-light">{{ email }}</strong> has been verified. Your account is currently awaiting approval by the Administrator. Once approved, your 30-day billing cycle will begin.
           </p>
 
           <router-link to="/login" class="btn-submit text-decoration-none">
             <i class="bi bi-box-arrow-in-right"></i>
             <span>Go to Sign In</span>
           </router-link>
+        </div>
+
+        <!-- ========================================== -->
+        <!-- STEP 2: EMAIL OTP VERIFICATION             -->
+        <!-- ========================================== -->
+        <div v-else-if="currentStep === 2" class="auth-form">
+          <div class="text-center mb-3">
+            <p class="form-desc mb-1">
+              We sent a 6-digit verification code to
+            </p>
+            <strong class="text-light">{{ email }}</strong>
+          </div>
+
+          <form @submit.prevent="onVerifyOtpSubmit" class="auth-form">
+            <div class="field-group text-center">
+              <label class="field-label">6-Digit Verification Code</label>
+              <input
+                ref="otpInputRef"
+                v-model="otpCode"
+                type="text"
+                class="login-input otp-code-input"
+                placeholder="••••••"
+                maxlength="6"
+                inputmode="numeric"
+                autocomplete="one-time-code"
+                required
+                autofocus />
+              <div class="field-hint text-center mt-1">
+                <i class="bi bi-clock-history me-1"></i>
+                Code expires in <strong class="text-info">{{ formattedTimeRemaining }}</strong>
+              </div>
+            </div>
+
+            <button
+              type="submit"
+              class="btn-submit"
+              :disabled="loading || otpCode.length !== 6">
+              <span v-if="loading" class="spinner-border spinner-border-sm" role="status"></span>
+              <i v-else class="bi bi-shield-check"></i>
+              <span>{{ loading ? 'Verifying Code...' : 'Verify Email' }}</span>
+            </button>
+          </form>
+
+          <!-- Resend Code -->
+          <div class="text-center pt-2">
+            <button
+              type="button"
+              class="resend-btn"
+              :disabled="resendCooldown > 0 || loading"
+              @click="onResendOtp">
+              <i class="bi bi-arrow-repeat me-1"></i>
+              <span v-if="resendCooldown > 0">Resend Code in {{ resendCooldown }}s</span>
+              <span v-else>Didn't receive code? Resend</span>
+            </button>
+          </div>
+
+          <div class="auth-footer">
+            <button type="button" class="back-btn" @click="currentStep = 1">
+              <i class="bi bi-arrow-left me-1"></i> Back to Registration Form
+            </button>
+          </div>
         </div>
 
         <!-- ========================================== -->
@@ -133,7 +198,7 @@
 
           <div class="approval-notice">
             <i class="bi bi-shield-check"></i>
-            <span>New accounts are approved by Admin with a 30-day renewable billing cycle.</span>
+            <span>New accounts are verified via Email OTP and approved by Admin for 30-day access.</span>
           </div>
 
           <button
@@ -141,8 +206,8 @@
             class="btn-submit"
             :disabled="loading">
             <span v-if="loading" class="spinner-border spinner-border-sm" role="status"></span>
-            <i v-else class="bi bi-person-plus-fill"></i>
-            <span>{{ loading ? 'Submitting Application...' : 'Create Account' }}</span>
+            <i v-else class="bi bi-send-fill"></i>
+            <span>{{ loading ? 'Sending Verification Code...' : 'Send Verification Code' }}</span>
           </button>
 
           <div class="auth-footer">
@@ -159,7 +224,7 @@
 
 <script setup lang="ts">
 import { useHead } from "@vueuse/head";
-import { ref } from "vue";
+import { ref, computed, onUnmounted, nextTick } from "vue";
 import { useAuthStore } from "@/stores/auth";
 
 useHead({ title: "Create Account - Jupiter" });
@@ -173,10 +238,64 @@ const passwordConfirmation = ref("");
 const showPassword = ref(false);
 const showPasswordConfirm = ref(false);
 
-const isPendingStep = ref(false);
+const currentStep = ref(1); // 1 = Form, 2 = OTP, 3 = Pending
+const otpCode = ref("");
 const loading = ref(false);
 const errorMessage = ref("");
 const successMessage = ref("");
+
+const otpInputRef = ref<HTMLInputElement | null>(null);
+
+// Countdown Timer (10 mins = 600s)
+const secondsRemaining = ref(600);
+let timerInterval: any = null;
+
+const resendCooldown = ref(0);
+let cooldownInterval: any = null;
+
+const formattedTimeRemaining = computed(() => {
+  const m = Math.floor(secondsRemaining.value / 60);
+  const s = secondsRemaining.value % 60;
+  return `${m}:${s < 10 ? "0" : ""}${s}`;
+});
+
+function startCountdown() {
+  stopCountdown();
+  secondsRemaining.value = 600;
+  timerInterval = setInterval(() => {
+    if (secondsRemaining.value > 0) {
+      secondsRemaining.value--;
+    } else {
+      stopCountdown();
+      errorMessage.value = "Verification code has expired. Please request a new code.";
+    }
+  }, 1000);
+}
+
+function stopCountdown() {
+  if (timerInterval) {
+    clearInterval(timerInterval);
+    timerInterval = null;
+  }
+}
+
+function startResendCooldown() {
+  resendCooldown.value = 60;
+  if (cooldownInterval) clearInterval(cooldownInterval);
+  cooldownInterval = setInterval(() => {
+    if (resendCooldown.value > 0) {
+      resendCooldown.value--;
+    } else {
+      clearInterval(cooldownInterval);
+      cooldownInterval = null;
+    }
+  }, 1000);
+}
+
+onUnmounted(() => {
+  stopCountdown();
+  if (cooldownInterval) clearInterval(cooldownInterval);
+});
 
 async function onRegisterSubmit() {
   errorMessage.value = "";
@@ -197,10 +316,65 @@ async function onRegisterSubmit() {
       password_confirmation: passwordConfirmation.value
     });
 
-    isPendingStep.value = true;
-    successMessage.value = res || "Registration successful! Your account has been created.";
+    currentStep.value = 2;
+    otpCode.value = "";
+    successMessage.value = res.message || "A 6-digit verification code has been sent to your email.";
+    startCountdown();
+    startResendCooldown();
+
+    nextTick(() => {
+      otpInputRef.value?.focus();
+    });
   } catch (err: any) {
-    errorMessage.value = err.message || "Failed to register account.";
+    errorMessage.value = err.message || "Failed to initiate registration.";
+  } finally {
+    loading.value = false;
+  }
+}
+
+async function onVerifyOtpSubmit() {
+  if (otpCode.value.length !== 6) {
+    errorMessage.value = "Please enter the complete 6-digit code.";
+    return;
+  }
+
+  errorMessage.value = "";
+  successMessage.value = "";
+  loading.value = true;
+
+  try {
+    const res = await auth.verifySignupOtp({
+      email: email.value.trim(),
+      otp: otpCode.value.trim()
+    });
+
+    stopCountdown();
+    currentStep.value = 3;
+    successMessage.value = res.message || "Email verified! Awaiting Administrator approval.";
+  } catch (err: any) {
+    errorMessage.value = err.message || "Invalid or expired verification code.";
+  } finally {
+    loading.value = false;
+  }
+}
+
+async function onResendOtp() {
+  if (resendCooldown.value > 0 || loading.value) return;
+  errorMessage.value = "";
+  successMessage.value = "";
+  loading.value = true;
+
+  try {
+    const msg = await auth.resendOtp({
+      email: email.value.trim(),
+      type: "signup"
+    });
+    successMessage.value = msg || "A fresh verification code has been sent to your email.";
+    otpCode.value = "";
+    startCountdown();
+    startResendCooldown();
+  } catch (err: any) {
+    errorMessage.value = err.message || "Failed to resend verification code.";
   } finally {
     loading.value = false;
   }
@@ -266,6 +440,13 @@ async function onRegisterSubmit() {
   text-transform: uppercase;
 }
 
+.form-desc {
+  font-size: 0.83rem;
+  color: #94a3b8;
+  line-height: 1.5;
+  margin-bottom: 0.5rem;
+}
+
 .auth-form {
   display: flex;
   flex-direction: column;
@@ -324,6 +505,16 @@ async function onRegisterSubmit() {
 
 .password-input {
   padding-right: 2.5rem !important;
+}
+
+.otp-code-input {
+  padding: 0.75rem !important;
+  font-family: monospace;
+  font-size: 1.5rem !important;
+  font-weight: 800;
+  text-align: center;
+  letter-spacing: 0.45em;
+  color: #38bdf8 !important;
 }
 
 .field-eye-btn {
@@ -394,6 +585,36 @@ async function onRegisterSubmit() {
 .btn-submit:disabled {
   opacity: 0.6;
   cursor: not-allowed;
+}
+
+.resend-btn {
+  background: none;
+  border: none;
+  color: #38bdf8;
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.resend-btn:hover:not(:disabled) {
+  text-decoration: underline;
+}
+
+.resend-btn:disabled {
+  color: #64748b;
+  cursor: not-allowed;
+}
+
+.back-btn {
+  background: none;
+  border: none;
+  color: #94a3b8;
+  font-size: 0.82rem;
+  cursor: pointer;
+}
+
+.back-btn:hover {
+  color: #38bdf8;
 }
 
 .auth-footer {

@@ -4,22 +4,33 @@ import { ref } from "vue";
 import { type AuthUser, clearUser, setUser } from "@/composables/useAuth";
 
 type LoginPayload = { email: string; password: string; remember?: boolean };
+type VerifyLoginOtpPayload = { email: string; otp: string; remember?: boolean };
 type RegisterPayload = {
   name: string;
   email: string;
   password: string;
   password_confirmation: string;
 };
-type VerifyEmailPayload = { email: string; token: string };
-type ForgotPayload = { email: string };
-type ResetPayload = {
+type VerifySignupOtpPayload = { email: string; otp: string };
+type ResendOtpPayload = { email: string; type: "signup" | "login" | "reset_password" };
+type ResetPasswordOtpPayload = {
   email: string;
-  token: string;
+  otp: string;
   password: string;
   password_confirmation: string;
 };
 
-type ApiResponse<T> = { message: string; data?: T };
+type ApiResponse<T> = {
+  message: string;
+  data?: T;
+  requireOtp?: boolean;
+  isPendingApproval?: boolean;
+  isSuspended?: boolean;
+  isSubscriptionExpired?: boolean;
+  email?: string;
+  success?: boolean;
+};
+
 type AuthData = {
   user: AuthUser;
   access_token?: string;
@@ -47,16 +58,15 @@ async function request<T>(method: "GET" | "POST", path: string, payload?: unknow
     return response.data;
   } catch (error: unknown) {
     if (axios.isAxiosError(error)) {
-      throw new Error(String(error.response?.data?.message || error.message || "Request failed"));
+      const respData = error.response?.data;
+      const err = new Error(String(respData?.message || error.message || "Request failed")) as any;
+      err.response = error.response;
+      err.data = respData;
+      throw err;
     }
     throw new Error("Request failed");
   }
 }
-
-const MAX_BOOTSTRAP_ATTEMPTS = 5;
-const BOOTSTRAP_BACKOFF_MS = 500;
-
-const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 export const useAuthStore = defineStore("auth", () => {
   const user = ref<AuthUser | null>(null);
@@ -83,7 +93,6 @@ export const useAuthStore = defineStore("auth", () => {
   const bootstrap = async (forceRefresh = false) => {
     if (initialized.value && !forceRefresh) return;
 
-    // Load from localStorage immediately so page reloads don't flicker unauthenticated
     try {
       const cached = localStorage.getItem("idp_auth_user");
       if (cached && !user.value) {
@@ -115,77 +124,117 @@ export const useAuthStore = defineStore("auth", () => {
     initialized.value = true;
   };
 
+  /**
+   * 1. Login Request - Verifies credentials and dispatches 2FA Login OTP
+   */
   const login = async (payload: LoginPayload) => {
     processing.value = true;
     try {
-      const data = await request<AuthData>("POST", "/login", payload);
-      if (data?.data?.access_token) {
-        try { localStorage.setItem("idp_access_token", data.data.access_token); } catch {}
+      const res = await request<AuthData>("POST", "/login", payload);
+      // If direct login without OTP
+      if (res?.data?.access_token) {
+        try { localStorage.setItem("idp_access_token", res.data.access_token); } catch {}
+        if (res?.data?.refresh_token) {
+          try { localStorage.setItem("idp_refresh_token", res.data.refresh_token); } catch {}
+        }
+        syncUser((res?.data?.user || null) as AuthUser | null);
+        initialized.value = true;
       }
-      if (data?.data?.refresh_token) {
-        try { localStorage.setItem("idp_refresh_token", data.data.refresh_token); } catch {}
-      }
-      syncUser((data?.data?.user || null) as AuthUser | null);
-      initialized.value = true;
-      return data.message || "Login successful";
+      return res;
     } finally {
       processing.value = false;
     }
   };
 
+  /**
+   * 2. Verify 2FA Login OTP
+   */
+  const verifyLoginOtp = async (payload: VerifyLoginOtpPayload) => {
+    processing.value = true;
+    try {
+      const res = await request<AuthData>("POST", "/verify-login-otp", payload);
+      if (res?.data?.access_token) {
+        try { localStorage.setItem("idp_access_token", res.data.access_token); } catch {}
+      }
+      if (res?.data?.refresh_token) {
+        try { localStorage.setItem("idp_refresh_token", res.data.refresh_token); } catch {}
+      }
+      syncUser((res?.data?.user || null) as AuthUser | null);
+      initialized.value = true;
+      return res;
+    } finally {
+      processing.value = false;
+    }
+  };
+
+  /**
+   * 3. Register Request - Initiates registration and dispatches Email OTP
+   */
   const register = async (payload: RegisterPayload) => {
     processing.value = true;
     try {
-      const data = await request<AuthData>("POST", "/register", payload);
-      if (data?.data?.access_token) {
-        try { localStorage.setItem("idp_access_token", data.data.access_token); } catch {}
-      }
-      if (data?.data?.refresh_token) {
-        try { localStorage.setItem("idp_refresh_token", data.data.refresh_token); } catch {}
-      }
-      const createdUser = (data?.data?.user || null) as AuthUser | null;
-      if (createdUser) {
-        syncUser(createdUser);
-        initialized.value = true;
-      } else {
-        syncUser(null);
-      }
-      return data.message || "Registration successful";
+      const res = await request<AuthData>("POST", "/register", payload);
+      return res;
     } finally {
       processing.value = false;
     }
   };
 
-  const verifyEmail = async (payload: VerifyEmailPayload) => {
+  /**
+   * 4. Verify Signup OTP
+   */
+  const verifySignupOtp = async (payload: VerifySignupOtpPayload) => {
     processing.value = true;
     try {
-      const data = await request<unknown>("POST", "/verify-email", payload);
-      return data.message || "Email verified successfully";
+      const res = await request<AuthData>("POST", "/verify-otp", payload);
+      return res;
     } finally {
       processing.value = false;
     }
   };
 
-  const forgotPassword = async (payload: ForgotPayload) => {
+  /**
+   * 5. Resend OTP
+   */
+  const resendOtp = async (payload: ResendOtpPayload) => {
     processing.value = true;
     try {
-      const data = await request<unknown>("POST", "/forgot-password", payload);
-      return data.message || "If this email exists, a reset link has been sent";
+      const res = await request<unknown>("POST", "/resend-otp", payload);
+      return res.message || "A new code has been sent to your email.";
     } finally {
       processing.value = false;
     }
   };
 
-  const resetPassword = async (payload: ResetPayload) => {
+  /**
+   * 6. Forgot Password
+   */
+  const forgotPassword = async (email: string) => {
     processing.value = true;
     try {
-      const data = await request<unknown>("POST", "/reset-password", payload);
-      return data.message || "Password reset successfully";
+      const res = await request<unknown>("POST", "/forgot-password", { email });
+      return res.message || "A 6-digit reset code has been sent to your email.";
     } finally {
       processing.value = false;
     }
   };
 
+  /**
+   * 7. Reset Password with OTP
+   */
+  const resetPasswordWithOtp = async (payload: ResetPasswordOtpPayload) => {
+    processing.value = true;
+    try {
+      const res = await request<unknown>("POST", "/reset-password", payload);
+      return res.message || "Password reset successfully.";
+    } finally {
+      processing.value = false;
+    }
+  };
+
+  /**
+   * 8. Logout
+   */
   const logout = async () => {
     processing.value = true;
     try {
@@ -193,7 +242,7 @@ export const useAuthStore = defineStore("auth", () => {
     } finally {
       syncUser(null);
       processing.value = false;
-      initialized.value = false; // Reset so bootstrap() re-fetches after next login
+      initialized.value = false;
     }
   };
 
@@ -204,11 +253,13 @@ export const useAuthStore = defineStore("auth", () => {
     initialized,
     syncUser,
     bootstrap,
-    register,
     login,
+    verifyLoginOtp,
+    register,
+    verifySignupOtp,
+    resendOtp,
     forgotPassword,
-    resetPassword,
-    verifyEmail,
+    resetPasswordWithOtp,
     logout
   };
 });
