@@ -121,6 +121,7 @@ export const mail = {
         subject: payload.subject,
         text: payload.text,
         html: payload.html,
+        date: new Date(),
         messageId,
         headers: {
           "X-Priority": "3",
