@@ -96,8 +96,9 @@ export const mail = {
               .trim()
           : undefined);
 
+      const fromName = (mailConfig as any).fromName || process.env.MAIL_FROM_NAME || "Jupiter";
       return await transport.sendMail({
-        from: `"${mailConfig.fromName || 'Jupiter'}" <${mailConfig.fromAddress}>`,
+        from: `"${fromName}" <${mailConfig.fromAddress}>`,
         ...payload,
         text: textFallback,
         headers: {

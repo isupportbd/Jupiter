@@ -471,21 +471,21 @@ export const refreshToken: Handler = async (c: any) => {
 
     await db.update(refreshTokens).set({ revoked: 1 }).where(eq(refreshTokens.id, storedToken.id));
 
-    const newPayload = await jwt.verifyToken(newRefreshToken, "refresh");
-    const expiresAt = new Date(Date.now() + (refreshExpiry || jwtConfig.refreshExpirySeconds) * 1000);
-
-    if (newPayload?.jti) {
+    if (newRefreshToken.jti) {
       await db.insert(refreshTokens).values({
         userId: user.id,
-        jti: newPayload.jti as string,
-        expiresAt,
+        jti: newRefreshToken.jti,
+        expiresAt: new Date(newRefreshToken.exp * 1000),
         revoked: 0
       });
     }
 
+    await cookie.setAuth(c, accessToken.token);
+    await cookie.setRefresh(c, newRefreshToken.token, refreshExpiry);
+
     return c.json({
-      access_token: accessToken,
-      refresh_token: newRefreshToken,
+      access_token: accessToken.token,
+      refresh_token: newRefreshToken.token,
       token_type: "Bearer"
     });
   } catch (error) {
@@ -530,7 +530,8 @@ export const me: Handler = async (c: any) => {
 export const logout: Handler = async (c: any) => {
   try {
     await revokeCurrentRefreshToken(c);
-    cookie.clear(c, "refresh_token");
+    cookie.deleteRefresh(c);
+    cookie.deleteAuth(c);
     return c.json({ message: "Logged out successfully" }, HttpStatusCodes.OK);
   } catch (error) {
     console.error("Logout error:", error);
@@ -548,7 +549,8 @@ export const logoutAllDevices: Handler = async (c: any) => {
     if (auth?.id) {
       await db.update(refreshTokens).set({ revoked: 1 }).where(eq(refreshTokens.userId, Number(auth.id)));
     }
-    cookie.clear(c, "refresh_token");
+    cookie.deleteRefresh(c);
+    cookie.deleteAuth(c);
     return c.json({ message: "Logged out from all devices" }, HttpStatusCodes.OK);
   } catch (error) {
     console.error("Logout all devices error:", error);
