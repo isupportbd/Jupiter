@@ -548,10 +548,10 @@ const mwYearFilter = ref("");
 const mwMonthFrom = ref("");
 const mwMonthTo = ref("");
 
-// Interactive Count Mode State (false = Regular / Default, true = Unique)
-const isLcUnique = ref(false);
-const isBenUnique = ref(false);
-const isBankUnique = ref(false);
+// Interactive Count Mode State (true = Unique / Default, false = Regular)
+const isLcUnique = ref(true);
+const isBenUnique = ref(true);
+const isBankUnique = ref(true);
 
 const mwSummary = ref<{
   totalMonths: number;
@@ -2001,6 +2001,7 @@ onMounted(() => {
   font-size: 0.86rem;
   color: #e2e8f0;
   border-collapse: collapse;
+  background: #111722;
 }
 
 .jupiter-report-table thead th {

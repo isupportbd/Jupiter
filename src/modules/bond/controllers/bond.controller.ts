@@ -433,7 +433,21 @@ export const getMonthwiseSummary: Handler = async (c: any) => {
       )
       .orderBy(sql`TO_CHAR(COALESCE(entry_date, lc_date), 'YYYY-MM') DESC`);
 
-    const results = await query;
+    const [[overallSummary], results] = await Promise.all([
+      db
+        .select({
+          totalRecords: sql<number>`COUNT(*)`,
+          totalLcRegular: sql<number>`COUNT(CASE WHEN lc_id IS NOT NULL AND TRIM(lc_id) != '' THEN 1 END)`,
+          totalBeneficiaryRegular: sql<number>`COUNT(CASE WHEN beneficiary_name IS NOT NULL AND TRIM(beneficiary_name) != '' THEN 1 END)`,
+          totalBankRegular: sql<number>`COUNT(CASE WHEN bank_name IS NOT NULL AND TRIM(bank_name) != '' THEN 1 END)`,
+          totalLcUnique: sql<number>`COUNT(DISTINCT CASE WHEN lc_id IS NOT NULL AND TRIM(lc_id) != '' THEN TRIM(lc_id) END)`,
+          totalBeneficiaryUnique: sql<number>`COUNT(DISTINCT CASE WHEN beneficiary_name IS NOT NULL AND TRIM(beneficiary_name) != '' THEN TRIM(beneficiary_name) END)`,
+          totalBankUnique: sql<number>`COUNT(DISTINCT CASE WHEN bank_name IS NOT NULL AND TRIM(bank_name) != '' THEN TRIM(bank_name) END)`
+        })
+        .from(bondRecords)
+        .where(whereClause),
+      query
+    ]);
 
     let sumTotalRecords = 0;
     let sumTotalLcRegular = 0;
@@ -481,16 +495,16 @@ export const getMonthwiseSummary: Handler = async (c: any) => {
       data: formattedResults,
       summary: {
         totalMonths: formattedResults.length,
-        totalRecords: sumTotalRecords,
-        totalLc: sumTotalLcRegular,
-        totalBeneficiary: sumTotalBeneficiaryRegular,
-        totalBank: sumTotalBankRegular,
-        totalLcRegular: sumTotalLcRegular,
-        totalBeneficiaryRegular: sumTotalBeneficiaryRegular,
-        totalBankRegular: sumTotalBankRegular,
-        totalLcUnique: sumTotalLcUnique,
-        totalBeneficiaryUnique: sumTotalBeneficiaryUnique,
-        totalBankUnique: sumTotalBankUnique
+        totalRecords: Number(overallSummary?.totalRecords ?? sumTotalRecords),
+        totalLc: Number(overallSummary?.totalLcRegular ?? sumTotalLcRegular),
+        totalBeneficiary: Number(overallSummary?.totalBeneficiaryRegular ?? sumTotalBeneficiaryRegular),
+        totalBank: Number(overallSummary?.totalBankRegular ?? sumTotalBankRegular),
+        totalLcRegular: Number(overallSummary?.totalLcRegular ?? sumTotalLcRegular),
+        totalBeneficiaryRegular: Number(overallSummary?.totalBeneficiaryRegular ?? sumTotalBeneficiaryRegular),
+        totalBankRegular: Number(overallSummary?.totalBankRegular ?? sumTotalBankRegular),
+        totalLcUnique: Number(overallSummary?.totalLcUnique ?? sumTotalLcUnique),
+        totalBeneficiaryUnique: Number(overallSummary?.totalBeneficiaryUnique ?? sumTotalBeneficiaryUnique),
+        totalBankUnique: Number(overallSummary?.totalBankUnique ?? sumTotalBankUnique)
       }
     });
   } catch (error: any) {
