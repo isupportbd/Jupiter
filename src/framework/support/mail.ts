@@ -7,7 +7,7 @@ type MailPayload = {
   to: string;
   subject: string;
   html: string;
-  text: string;
+  text?: string;
 };
 
 function getTransport() {
@@ -138,7 +138,7 @@ export const mail = {
         replyTo: fromAddress,
         to: payload.to,
         subject: payload.subject,
-        text: payload.text,
+        text: payload.text || payload.html.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim(),
         html: payload.html,
         date: new Date(),
         messageId,
