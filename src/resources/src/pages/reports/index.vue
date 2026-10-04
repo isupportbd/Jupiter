@@ -1474,48 +1474,45 @@ onMounted(() => {
                   <th class="text-center" style="width: 48px;">#</th>
                   <th style="width: 20%;">Month</th>
                   <th class="text-end" style="width: 15%;">Total Records</th>
-                  <th class="text-end" style="width: 17%;">
-                    <div class="d-inline-flex align-items-center justify-content-end gap-1.5 w-100">
+                  <th class="text-end" style="width: 16%;">
+                    <div class="d-inline-flex align-items-center justify-content-end w-100">
                       <span>Total LC</span>
                       <button
                         type="button"
-                        class="btn-count-mode"
+                        class="btn-icon-toggle ms-2"
                         :class="{ active: isLcUnique }"
-                        :title="isLcUnique ? 'Click to show Regular (All) Count' : 'Click to show Unique Count'"
+                        :title="isLcUnique ? 'Unique Count (Click to switch to Regular Count)' : 'Regular Count (Click to switch to Unique Count)'"
                         @click.stop="isLcUnique = !isLcUnique"
                       >
-                        <span class="mode-text">{{ isLcUnique ? 'Unique' : 'Regular' }}</span>
-                        <i :class="isLcUnique ? 'bi bi-fingerprint text-info' : 'bi bi-list-ol opacity-60'"></i>
+                        <i :class="isLcUnique ? 'bi bi-fingerprint text-info fs-6' : 'bi bi-list-ol text-secondary opacity-50 fs-6'"></i>
                       </button>
                     </div>
                   </th>
-                  <th class="text-end" style="width: 20%;">
-                    <div class="d-inline-flex align-items-center justify-content-end gap-1.5 w-100">
+                  <th class="text-end" style="width: 19%;">
+                    <div class="d-inline-flex align-items-center justify-content-end w-100">
                       <span>Total Beneficiary</span>
                       <button
                         type="button"
-                        class="btn-count-mode"
+                        class="btn-icon-toggle ms-2"
                         :class="{ active: isBenUnique }"
-                        :title="isBenUnique ? 'Click to show Regular (All) Count' : 'Click to show Unique Count'"
+                        :title="isBenUnique ? 'Unique Count (Click to switch to Regular Count)' : 'Regular Count (Click to switch to Unique Count)'"
                         @click.stop="isBenUnique = !isBenUnique"
                       >
-                        <span class="mode-text">{{ isBenUnique ? 'Unique' : 'Regular' }}</span>
-                        <i :class="isBenUnique ? 'bi bi-fingerprint text-info' : 'bi bi-list-ol opacity-60'"></i>
+                        <i :class="isBenUnique ? 'bi bi-fingerprint text-info fs-6' : 'bi bi-list-ol text-secondary opacity-50 fs-6'"></i>
                       </button>
                     </div>
                   </th>
-                  <th class="text-end" style="width: 16%;">
-                    <div class="d-inline-flex align-items-center justify-content-end gap-1.5 w-100">
+                  <th class="text-end" style="width: 15%;">
+                    <div class="d-inline-flex align-items-center justify-content-end w-100">
                       <span>Total Bank</span>
                       <button
                         type="button"
-                        class="btn-count-mode"
+                        class="btn-icon-toggle ms-2"
                         :class="{ active: isBankUnique }"
-                        :title="isBankUnique ? 'Click to show Regular (All) Count' : 'Click to show Unique Count'"
+                        :title="isBankUnique ? 'Unique Count (Click to switch to Regular Count)' : 'Regular Count (Click to switch to Unique Count)'"
                         @click.stop="isBankUnique = !isBankUnique"
                       >
-                        <span class="mode-text">{{ isBankUnique ? 'Unique' : 'Regular' }}</span>
-                        <i :class="isBankUnique ? 'bi bi-fingerprint text-info' : 'bi bi-list-ol opacity-60'"></i>
+                        <i :class="isBankUnique ? 'bi bi-fingerprint text-info fs-6' : 'bi bi-list-ol text-secondary opacity-50 fs-6'"></i>
                       </button>
                     </div>
                   </th>
@@ -2108,39 +2105,29 @@ onMounted(() => {
   margin-top: 1rem;
 }
 
-/* Interactive Unique/Regular count toggle buttons in Monthwise header */
-.btn-count-mode {
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  color: #94a3b8;
-  font-size: 0.68rem;
-  font-weight: 500;
-  padding: 0.12rem 0.45rem;
-  border-radius: 20px;
+/* Interactive Unique/Regular count toggle icon button in Monthwise header */
+.btn-icon-toggle {
+  background: transparent;
+  border: none;
+  padding: 0;
   display: inline-flex;
   align-items: center;
-  gap: 0.25rem;
+  justify-content: center;
   cursor: pointer;
-  transition: all 0.2s ease;
-  line-height: 1.2;
+  line-height: 1;
+  transition: all 0.15s ease;
 }
 
-.btn-count-mode:hover {
-  background: rgba(56, 189, 248, 0.15);
-  border-color: rgba(56, 189, 248, 0.4);
-  color: #38bdf8;
+.btn-icon-toggle:hover i {
+  color: #38bdf8 !important;
+  opacity: 1 !important;
+  transform: scale(1.18);
 }
 
-.btn-count-mode.active {
-  background: rgba(56, 189, 248, 0.22);
-  border-color: #38bdf8;
-  color: #7dd3fc;
-  box-shadow: 0 0 8px rgba(56, 189, 248, 0.25);
-}
-
-.btn-count-mode .mode-text {
-  font-family: system-ui, -apple-system, sans-serif;
-  letter-spacing: 0.02em;
+.btn-icon-toggle.active i {
+  color: #38bdf8 !important;
+  opacity: 1 !important;
+  filter: drop-shadow(0 0 5px rgba(56, 189, 248, 0.6));
 }
 
 /* Custom Beneficiary Autocomplete Menu */
