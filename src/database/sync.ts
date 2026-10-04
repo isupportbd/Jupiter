@@ -33,43 +33,143 @@ export async function syncDatabaseSchemaAndSuperAdmin() {
         name VARCHAR(255) NOT NULL UNIQUE,
         created_at TIMESTAMP NOT NULL DEFAULT NOW(),
         updated_at TIMESTAMP NOT NULL DEFAULT NOW()
-      )
+      );
     `);
     await executeSingleSql(
-      `INSERT INTO roles (name) VALUES ('superadmin'), ('admin'), ('user') ON CONFLICT (name) DO NOTHING`
+      `INSERT INTO roles (name) VALUES ('superadmin'), ('admin'), ('user') ON CONFLICT (name) DO NOTHING;`
     );
   } catch (rErr) {
     console.warn("[DB Roles Warning]", rErr);
   }
 
-  // 2. Ensure users table columns
+  // 2. Ensure Users table
   try {
+    await executeSingleSql(`
+      CREATE TABLE IF NOT EXISTS users (
+        id SERIAL PRIMARY KEY,
+        name VARCHAR(255) NOT NULL,
+        email VARCHAR(255) NOT NULL UNIQUE,
+        password TEXT NOT NULL,
+        role_id INTEGER REFERENCES roles(id) ON UPDATE CASCADE ON DELETE SET NULL,
+        status VARCHAR(50) NOT NULL DEFAULT 'pending',
+        subscription_expires_at TIMESTAMP WITH TIME ZONE,
+        billing_cycle_days INTEGER NOT NULL DEFAULT 30,
+        approved_at TIMESTAMP WITH TIME ZONE,
+        approved_by INTEGER,
+        email_verified_at TIMESTAMP WITH TIME ZONE,
+        created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
+      );
+    `);
+
     await executeSingleSql(`
       ALTER TABLE users ADD COLUMN IF NOT EXISTS status VARCHAR(50) NOT NULL DEFAULT 'pending';
       ALTER TABLE users ADD COLUMN IF NOT EXISTS subscription_expires_at TIMESTAMP WITH TIME ZONE;
       ALTER TABLE users ADD COLUMN IF NOT EXISTS billing_cycle_days INTEGER NOT NULL DEFAULT 30;
       ALTER TABLE users ADD COLUMN IF NOT EXISTS approved_at TIMESTAMP WITH TIME ZONE;
       ALTER TABLE users ADD COLUMN IF NOT EXISTS approved_by INTEGER;
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS email_verified_at TIMESTAMP WITH TIME ZONE;
     `);
   } catch (uErr) {
     console.warn("[DB Users Columns Warning]", uErr);
   }
 
-  // 3. Ensure bond_records table columns & index
+  // 3. Ensure Auth Support Tables
   try {
     await executeSingleSql(`
-      ALTER TABLE bond_records ADD COLUMN IF NOT EXISTS user_id INTEGER REFERENCES users(id) ON DELETE CASCADE;
+      CREATE TABLE IF NOT EXISTS refresh_tokens (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER REFERENCES users(id) ON UPDATE CASCADE ON DELETE CASCADE,
+        jti VARCHAR(191) NOT NULL UNIQUE,
+        revoked BOOLEAN DEFAULT FALSE,
+        expires_at TIMESTAMP WITH TIME ZONE NOT NULL,
+        created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
+      );
+
+      CREATE TABLE IF NOT EXISTS email_verification_tokens (
+        id SERIAL PRIMARY KEY,
+        email VARCHAR(255) NOT NULL,
+        token TEXT NOT NULL,
+        expires_at TIMESTAMP WITH TIME ZONE NOT NULL,
+        created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
+      );
+
+      CREATE TABLE IF NOT EXISTS password_reset_tokens (
+        id SERIAL PRIMARY KEY,
+        email VARCHAR(255) NOT NULL,
+        token TEXT NOT NULL,
+        expires_at TIMESTAMP WITH TIME ZONE NOT NULL,
+        created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
+      );
+
+      CREATE TABLE IF NOT EXISTS otp_verifications (
+        id SERIAL PRIMARY KEY,
+        email VARCHAR(255) NOT NULL,
+        otp_hash TEXT NOT NULL,
+        type VARCHAR(50) NOT NULL,
+        attempts INTEGER NOT NULL DEFAULT 0,
+        max_attempts INTEGER NOT NULL DEFAULT 5,
+        expires_at TIMESTAMP WITH TIME ZONE NOT NULL,
+        created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
+      );
+    `);
+  } catch (authErr) {
+    console.warn("[DB Auth Tables Warning]", authErr);
+  }
+
+  // 4. Ensure Bond Records table & index
+  try {
+    await executeSingleSql(`
+      CREATE TABLE IF NOT EXISTS bond_records (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER REFERENCES users(id) ON UPDATE CASCADE ON DELETE CASCADE,
+        bank_name TEXT NOT NULL,
+        branch_name TEXT,
+        ads_code TEXT,
+        lc_year TEXT,
+        lc_nature TEXT,
+        lc_serial TEXT,
+        lc_id TEXT,
+        lc_value NUMERIC(20, 2) DEFAULT 0,
+        currency TEXT DEFAULT 'USD',
+        lc_date TIMESTAMP WITH TIME ZONE,
+        lc_expiry_date TIMESTAMP WITH TIME ZONE,
+        bb_usanse_period TEXT,
+        last_ship_date TIMESTAMP WITH TIME ZONE,
+        proceeds_date TIMESTAMP WITH TIME ZONE,
+        applicant_name TEXT,
+        irc TEXT,
+        exporter_info TEXT,
+        export_lc_number TEXT,
+        beneficiary_bank TEXT,
+        beneficiary_branch TEXT,
+        beneficiary_name TEXT,
+        beneficiary_address TEXT,
+        beneficiary_irc TEXT,
+        beneficiary_erc TEXT,
+        pi_number TEXT,
+        pi_date TIMESTAMP WITH TIME ZONE,
+        bond_license TEXT,
+        accepted TEXT,
+        cancel_yn TEXT DEFAULT 'N',
+        cancel_cause TEXT,
+        entry_date TIMESTAMP WITH TIME ZONE,
+        created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
+      );
+
+      ALTER TABLE bond_records ADD COLUMN IF NOT EXISTS user_id INTEGER REFERENCES users(id) ON UPDATE CASCADE ON DELETE CASCADE;
       CREATE INDEX IF NOT EXISTS idx_bond_records_user_id ON bond_records(user_id);
     `);
   } catch (bErr) {
     console.warn("[DB Bond Records Columns Warning]", bErr);
   }
 
-  // 4. Dynamic SuperAdmin Account Setup from .env
+  // 5. Dynamic SuperAdmin Account Setup from .env
   try {
-    const superadminEmail = (process.env.SUPERADMIN_EMAIL || process.env.ADMIN_EMAIL || "isupportbd.info@gmail.com").trim().toLowerCase();
-    const superadminPassword = process.env.SUPERADMIN_PASSWORD || process.env.ADMIN_PASSWORD || "12345678";
-    const superadminName = process.env.SUPERADMIN_NAME || process.env.ADMIN_NAME || "Super Admin";
+    const superadminEmail = (process.env.ADMIN_EMAIL || process.env.SUPERADMIN_EMAIL || "isupportbd.info@gmail.com").trim().toLowerCase();
+    const superadminPassword = process.env.ADMIN_PASSWORD || process.env.SUPERADMIN_PASSWORD || "12345678";
+    const superadminName = process.env.ADMIN_NAME || process.env.SUPERADMIN_NAME || "Super Admin";
 
     if (superadminEmail && superadminPassword) {
       let [superadminRole] = await db.select().from(roles).where(eq(roles.name, "superadmin")).limit(1);
