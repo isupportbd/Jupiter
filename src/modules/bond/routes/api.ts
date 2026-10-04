@@ -3,6 +3,7 @@ import { authMiddleware } from "@/middlewares/auth-middleware.js";
 import {
   deleteMonthwiseRecords,
   getBeneficiaries,
+  getDatabaseStorageSize,
   getLocalLcReport,
   getMonthwiseSummary,
   getSummary,
@@ -17,8 +18,9 @@ router.use("*", authMiddleware);
 // 1. Chunked Upload Endpoint (POST /api/bond/upload/chunk)
 router.post("/upload/chunk", processUploadChunk);
 
-// 2. Summary & Counts Endpoint (GET /api/bond/summary)
+// 2. Summary & Counts Endpoint (GET /api/bond/summary & GET /api/bond/storage-size)
 router.get("/summary", getSummary);
+router.get("/storage-size", getDatabaseStorageSize);
 
 // 3. Local LC Report Endpoint (GET /api/bond/reports/local-lc)
 router.get("/reports/local-lc", getLocalLcReport);

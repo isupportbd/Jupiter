@@ -1,13 +1,33 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref } from "vue";
-import { useRouter } from "vue-router";
+import { computed, onMounted, onUnmounted, ref, watch } from "vue";
+import { useRoute, useRouter } from "vue-router";
 import { useAuthStore } from "@/stores/auth";
+import axios from "axios";
 
 const router = useRouter();
+const route = useRoute();
 const authStore = useAuthStore();
 
 const isDropdownOpen = ref(false);
 const dropdownRef = ref<HTMLElement | null>(null);
+
+const storageData = ref({
+  sizeBytes: 0,
+  sizePretty: "0 MB",
+  sizeMb: "0 MB",
+  sizeGb: "0.00 GB",
+  sizeGbPrecise: "0.000 GB"
+});
+
+const fetchStorageSize = async () => {
+  if (!authStore.isAuthenticated) return;
+  try {
+    const res = await axios.get("/api/bond/storage-size");
+    if (res.data && res.data.success && res.data.data) {
+      storageData.value = res.data.data;
+    }
+  } catch (_) {}
+};
 
 const handleClickOutside = (e: MouseEvent) => {
   if (dropdownRef.value && !dropdownRef.value.contains(e.target as Node)) {
@@ -15,8 +35,13 @@ const handleClickOutside = (e: MouseEvent) => {
   }
 };
 
+watch(() => route.path, () => {
+  fetchStorageSize();
+});
+
 onMounted(() => {
   document.addEventListener("click", handleClickOutside);
+  fetchStorageSize();
 });
 
 onUnmounted(() => {
@@ -79,9 +104,24 @@ const handleLogout = async () => {
         </router-link>
       </div>
 
-      <!-- Center: Subscription Days Remaining Badge in CENTER -->
-      <div class="d-flex align-items-center justify-content-center flex-grow-1 px-2">
-        <div v-if="!isAdmin && authStore.isAuthenticated" class="d-flex align-items-center justify-content-center">
+      <!-- Center: Storage Size & Subscription Status Badges in CENTER -->
+      <div class="d-flex align-items-center justify-content-center flex-grow-1 px-2 gap-2.5">
+        <!-- DB Storage Used Badge -->
+        <div v-if="authStore.isAuthenticated" class="d-flex align-items-center">
+          <div
+            class="storage-pill-badge font-monospace"
+            :title="`Total Database Size: ${storageData.sizePretty} (${storageData.sizeGbPrecise || storageData.sizeGb})`"
+          >
+            <i class="bi bi-database-fill-gear badge-icon text-cyan"></i>
+            <span class="badge-text">
+              <span class="text-muted small me-1">DB:</span>
+              <strong class="text-white">{{ storageData.sizeGb }}</strong>
+            </span>
+          </div>
+        </div>
+
+        <!-- Subscription Days Remaining Badge -->
+        <div v-if="!isAdmin && authStore.isAuthenticated" class="d-flex align-items-center">
           <div
             :class="[
               'subscription-pill-badge font-monospace',
@@ -178,6 +218,34 @@ const handleLogout = async () => {
 
 .brand-title {
   letter-spacing: -0.3px;
+}
+
+.storage-pill-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 5px 15px;
+  border-radius: 9999px;
+  background: rgba(14, 165, 233, 0.1);
+  border: 1px solid rgba(56, 189, 248, 0.35);
+  color: #38bdf8;
+  font-size: 0.83rem;
+  font-weight: 500;
+  line-height: 1.2;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  cursor: default;
+}
+
+.storage-pill-badge:hover {
+  background: rgba(14, 165, 233, 0.18);
+  border-color: rgba(56, 189, 248, 0.55);
+  box-shadow: 0 0 12px rgba(56, 189, 248, 0.25);
+}
+
+.text-cyan {
+  color: #38bdf8 !important;
 }
 
 .subscription-pill-badge {

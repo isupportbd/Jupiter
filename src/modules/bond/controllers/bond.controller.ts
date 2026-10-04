@@ -167,6 +167,44 @@ export const getSummary: Handler = async (c: any) => {
 };
 
 /**
+ * 2.1 Get Database Storage Size (Database size in GB/MB)
+ * Route: GET /api/bond/storage-size
+ */
+export const getDatabaseStorageSize: Handler = async (c: any) => {
+  try {
+    const { userId } = getAuthContext(c);
+    if (!userId) {
+      return c.json({ message: "Unauthorized" }, HttpStatusCodes.UNAUTHORIZED);
+    }
+
+    const result: any = await db.execute(
+      sql`SELECT pg_database_size(current_database()) AS size_bytes, pg_size_pretty(pg_database_size(current_database())) AS size_pretty`
+    );
+
+    const rows = result?.rows || result || [];
+    const sizeBytes = Number(rows[0]?.size_bytes || 0);
+    const sizePretty = String(rows[0]?.size_pretty || "0 MB");
+    const sizeGb = (sizeBytes / (1024 * 1024 * 1024)).toFixed(3);
+    const sizeGbDisplay = (sizeBytes / (1024 * 1024 * 1024)).toFixed(2);
+    const sizeMbDisplay = (sizeBytes / (1024 * 1024)).toFixed(2);
+
+    return c.json({
+      success: true,
+      data: {
+        sizeBytes,
+        sizePretty,
+        sizeMb: `${sizeMbDisplay} MB`,
+        sizeGb: `${sizeGbDisplay} GB`,
+        sizeGbPrecise: `${sizeGb} GB`
+      }
+    });
+  } catch (error: any) {
+    console.error("Database storage size error:", error);
+    return c.json({ message: error.message }, HttpStatusCodes.INTERNAL_SERVER_ERROR);
+  }
+};
+
+/**
  * 3. Get Local LC Report (Paginated + Filterable + Exportable + Strictly User Scoped)
  * Route: GET /api/bond/reports/local-lc
  */
