@@ -29,7 +29,20 @@ function getTransport() {
   });
 }
 
-function getEmailHtmlTemplate(title: string, name: string, code: string, desc: string, expiryText: string) {
+function getBstFormattedTime(date: Date = new Date()): string {
+  return new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Asia/Dhaka",
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: true
+  }).format(date);
+}
+
+function getEmailHtmlTemplate(title: string, name: string, code: string, desc: string, expiryText: string, sentTime: string) {
   return `<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
 <html xmlns="http://www.w3.org/1999/xhtml">
 <head>
@@ -63,11 +76,11 @@ function getEmailHtmlTemplate(title: string, name: string, code: string, desc: s
           <tr>
             <td style="padding:32px 32px 24px;">
               <h1 style="font-size:18px; font-weight:700; color:#0f172a; margin:0 0 14px 0;">Hello ${name || "User"},</h1>
-              <p style="font-size:14px; line-height:1.6; color:#475569; margin:0 0 24px 0;">
+              <p style="font-size:14px; line-height:1.6; color:#475569; margin:0 0 20px 0;">
                 ${desc}
               </p>
               <!-- OTP Box -->
-              <table border="0" cellpadding="0" cellspacing="0" width="100%" style="margin:24px 0;">
+              <table border="0" cellpadding="0" cellspacing="0" width="100%" style="margin:20px 0;">
                 <tr>
                   <td align="center">
                     <div style="display:inline-block; background-color:#f8fafc; border:2px solid #2563eb; border-radius:8px; padding:12px 28px; font-family:'Courier New', Courier, monospace; font-size:32px; font-weight:800; letter-spacing:8px; color:#1e40af;">
@@ -76,9 +89,15 @@ function getEmailHtmlTemplate(title: string, name: string, code: string, desc: s
                   </td>
                 </tr>
               </table>
-              <p style="font-size:13px; color:#64748b; text-align:center; margin:0 0 24px 0;">
+              <p style="font-size:13px; color:#64748b; text-align:center; margin:0 0 18px 0;">
                 ${expiryText}
               </p>
+              
+              <!-- Sent Timestamp Box -->
+              <div style="background-color:#f8fafc; border:1px solid #e2e8f0; border-radius:6px; padding:10px 14px; font-size:12px; color:#64748b; margin-bottom:16px; text-align:center;">
+                <span style="color:#0f172a; font-weight:600;">Time Sent:</span> ${sentTime} (BST / GMT+6)
+              </div>
+
               <div style="background-color:#f8fafc; border:1px solid #e2e8f0; border-left:4px solid #2563eb; border-radius:6px; padding:12px 16px; font-size:12px; line-height:1.5; color:#64748b;">
                 <strong style="color:#0f172a;">Security Notice:</strong> If you did not request this code, no further action is required. Your account remains secure.
               </div>
@@ -146,14 +165,15 @@ export const mail = {
   },
 
   async sendSignupOtpMail(to: string, name: string, otp: string) {
+    const bstTime = getBstFormattedTime();
     console.log(`\n========================================`);
-    console.log(`[AUTH OTP - SIGNUP] Code for ${to} is: [ ${otp} ]`);
+    console.log(`[AUTH OTP - SIGNUP] Code for ${to} is: [ ${otp} ] (Sent at: ${bstTime} BST)`);
     console.log(`========================================\n`);
 
     const desc = "Thank you for registering with Jupiter. Please use the verification code below to verify your email address:";
     const expiryText = "This code is valid for 10 minutes.";
-    const html = getEmailHtmlTemplate("Verify Your Jupiter Account", name, otp, desc, expiryText);
-    const text = `Hello ${name || "User"},\n\n${desc}\n\nVerification Code: ${otp}\n\n${expiryText}\n\nIf you did not request this, please ignore this message.\n\n- Jupiter`;
+    const html = getEmailHtmlTemplate("Verify Your Jupiter Account", name, otp, desc, expiryText, bstTime);
+    const text = `Hello ${name || "User"},\n\n${desc}\n\nVerification Code: ${otp}\n\n${expiryText}\nTime Sent: ${bstTime} (BST / GMT+6)\n\nIf you did not request this, please ignore this message.\n\n- Jupiter`;
 
     return this.sendMail({
       to,
@@ -164,14 +184,15 @@ export const mail = {
   },
 
   async sendLoginOtpMail(to: string, name: string, otp: string) {
+    const bstTime = getBstFormattedTime();
     console.log(`\n========================================`);
-    console.log(`[AUTH OTP - LOGIN 2FA] Code for ${to} is: [ ${otp} ]`);
+    console.log(`[AUTH OTP - LOGIN 2FA] Code for ${to} is: [ ${otp} ] (Sent at: ${bstTime} BST)`);
     console.log(`========================================\n`);
 
     const desc = "A sign-in attempt was made for your Jupiter account. Please use the security code below to complete your sign-in:";
     const expiryText = "This code is valid for 5 minutes.";
-    const html = getEmailHtmlTemplate("Jupiter Login Security Code", name, otp, desc, expiryText);
-    const text = `Hello ${name || "User"},\n\n${desc}\n\nSecurity Code: ${otp}\n\n${expiryText}\n\nIf you did not make this request, please change your password immediately.\n\n- Jupiter`;
+    const html = getEmailHtmlTemplate("Jupiter Login Security Code", name, otp, desc, expiryText, bstTime);
+    const text = `Hello ${name || "User"},\n\n${desc}\n\nSecurity Code: ${otp}\n\n${expiryText}\nTime Sent: ${bstTime} (BST / GMT+6)\n\nIf you did not make this request, please change your password immediately.\n\n- Jupiter`;
 
     return this.sendMail({
       to,
@@ -182,14 +203,15 @@ export const mail = {
   },
 
   async sendResetPasswordOtpMail(to: string, name: string, otp: string) {
+    const bstTime = getBstFormattedTime();
     console.log(`\n========================================`);
-    console.log(`[AUTH OTP - RESET PASSWORD] Code for ${to} is: [ ${otp} ]`);
+    console.log(`[AUTH OTP - RESET PASSWORD] Code for ${to} is: [ ${otp} ] (Sent at: ${bstTime} BST)`);
     console.log(`========================================\n`);
 
     const desc = "We received a request to reset your Jupiter account password. Enter the code below to set a new password:";
     const expiryText = "This code is valid for 10 minutes.";
-    const html = getEmailHtmlTemplate("Reset Your Jupiter Password", name, otp, desc, expiryText);
-    const text = `Hello ${name || "User"},\n\n${desc}\n\nReset Code: ${otp}\n\n${expiryText}\n\nIf you did not request this password reset, please ignore this email.\n\n- Jupiter`;
+    const html = getEmailHtmlTemplate("Reset Your Jupiter Password", name, otp, desc, expiryText, bstTime);
+    const text = `Hello ${name || "User"},\n\n${desc}\n\nReset Code: ${otp}\n\n${expiryText}\nTime Sent: ${bstTime} (BST / GMT+6)\n\nIf you did not request this password reset, please ignore this email.\n\n- Jupiter`;
 
     return this.sendMail({
       to,
