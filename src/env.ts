@@ -1,0 +1,95 @@
+import { config } from "dotenv";
+import { expand } from "dotenv-expand";
+import { z } from "zod";
+
+expand(config({ override: true }));
+
+const envSchema = z
+  .object({
+    APP_NAME: z.string().default("nexgen"),
+    APP_ENV: z.enum(["development", "production", "test"]).default("development"),
+    APP_PORT: z.coerce.number().default(3000),
+    APP_URL: z.string().trim().default("http://localhost:3000"),
+    UI: z
+      .string()
+      .default("true")
+      .transform((value) => value.trim().toLowerCase() !== "false" && value.trim() !== "0"),
+    FRONTEND_URL: z
+      .string()
+      .optional()
+      .transform((value) => value?.trim() || undefined),
+    DATABASE_URL: z.string().default("sqlite:./src/storage/database/nexgen.sqlite"),
+    REDIS: z
+      .string()
+      .default("false")
+      .transform((value) => value.trim().toLowerCase() !== "false" && value.trim() !== "0"),
+    REDIS_URL: z.string().default("redis://127.0.0.1:6379"),
+    REDIS_PREFIX: z
+      .string()
+      .default("nexgen")
+      .transform((value) => value.trim()),
+    JWT_ACCESS_SECRET: z.string().default("idp_jwt_access_secret_key_default_2026"),
+    JWT_REFRESH_SECRET: z.string().default("idp_jwt_refresh_secret_key_default_2026"),
+    COOKIE_SECRET: z.string().default("idp_cookie_secret_key_default_2026"),
+    STORAGE_ACCESS_KEY_ID: z
+      .string()
+      .optional()
+      .transform((value) => value?.trim() || undefined),
+    STORAGE_SECRET_ACCESS_KEY: z
+      .string()
+      .optional()
+      .transform((value) => value?.trim() || undefined),
+    MAIL_HOST: z.string().default("127.0.0.1"),
+    MAIL_PORT: z.coerce.number().default(1089),
+    MAIL_ENCRYPTION: z.enum(["none", "ssl", "tls"]).default("none"),
+    MAIL_USERNAME: z.string().default(""),
+    MAIL_PASSWORD: z.string().default(""),
+    MAIL_FROM_ADDRESS: z.string().default("no-reply@example.com"),
+    MAIL_FROM_NAME: z.string().default("IDP"),
+    SUPERADMIN_EMAIL: z
+      .string()
+      .optional()
+      .transform((value) => value?.trim() || undefined),
+    SUPERADMIN_PASSWORD: z
+      .string()
+      .optional()
+      .transform((value) => value?.trim() || undefined),
+    SUPERADMIN_NAME: z.string().default("Super Admin"),
+    ADMIN_EMAIL: z
+      .string()
+      .optional()
+      .transform((value) => value?.trim() || undefined),
+    ADMIN_PASSWORD: z
+      .string()
+      .optional()
+      .transform((value) => value?.trim() || undefined),
+    ADMIN_NAME: z.string().default("Super Admin"),
+    OPEN_API: z
+      .string()
+      .default("true")
+      .transform((value) => value.trim().toLowerCase() !== "false" && value.trim() !== "0"),
+    SOCKET: z
+      .string()
+      .default("false")
+      .transform((value) => value.trim().toLowerCase() !== "false" && value.trim() !== "0")
+  })
+  .superRefine((data, ctx) => {
+    for (const key of ["JWT_ACCESS_SECRET", "JWT_REFRESH_SECRET", "COOKIE_SECRET"] as const) {
+      if (!data[key]) {
+        ctx.addIssue({
+          code: "custom",
+          path: [key],
+          message: `${key} is required`
+        });
+      }
+    }
+  });
+
+const parsedEnv = envSchema.parse(process.env);
+
+export const env = {
+  ...parsedEnv,
+  FRONTEND_URL: parsedEnv.FRONTEND_URL
+};
+
+export type Env = typeof env;
