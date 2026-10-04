@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref, watch } from "vue";
+import { computed, onMounted, ref, watch } from "vue";
 import { useAuthStore } from "@/stores/auth";
 import axios from "axios";
 import ExcelJS from "exceljs";
@@ -863,13 +863,8 @@ const setActiveTab = (tab: TabType) => {
 };
 
 onMounted(() => {
-  document.addEventListener("click", handleClickOutsideBen);
   fetchBeneficiaries();
   fetchLocalLcData(1);
-});
-
-onUnmounted(() => {
-  document.removeEventListener("click", handleClickOutsideBen);
 });
 </script>
 
