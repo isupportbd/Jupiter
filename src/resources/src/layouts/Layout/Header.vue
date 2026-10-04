@@ -1,9 +1,8 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
-import { useRoute, useRouter } from "vue-router";
+import { useRouter } from "vue-router";
 import { useAuthStore } from "@/stores/auth";
 
-const route = useRoute();
 const router = useRouter();
 const authStore = useAuthStore();
 
@@ -15,7 +14,14 @@ const isAdmin = computed(() => {
 });
 
 const daysRemaining = computed(() => {
-  return Number((authStore.user as any)?.daysRemaining || 0);
+  const user = authStore.user as any;
+  if (!user) return 0;
+  if (isAdmin.value) return 9999;
+  if (user.subscriptionExpiresAt) {
+    const diff = new Date(user.subscriptionExpiresAt).getTime() - Date.now();
+    return Math.max(0, Math.ceil(diff / (1000 * 60 * 60 * 24)));
+  }
+  return Number(user.daysRemaining || 0);
 });
 
 const handleLogout = async () => {
@@ -28,8 +34,8 @@ const handleLogout = async () => {
 <template>
   <header class="idp-navbar">
     <div class="idp-grid-container h-100 d-flex align-items-center justify-content-between px-3">
-      <!-- Left: Brand & Navigation Links -->
-      <div class="d-flex align-items-center gap-4">
+      <!-- Left: Brand Logo Only (NO MENU TABS) -->
+      <div class="d-flex align-items-center">
         <router-link :to="isAdmin ? '/users' : '/'" class="idp-brand d-flex align-items-center gap-2.5 text-decoration-none">
           <div class="brand-badge-icon">
             <svg width="24" height="24" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -56,47 +62,29 @@ const handleLogout = async () => {
             <span class="fw-bold text-white fs-5 tracking-tight brand-title">Jupiter</span>
           </div>
         </router-link>
-
-        <!-- Navigation Links ONLY for Standard Users (Dashboard & Reports) -->
-        <nav v-if="!isAdmin" class="d-none d-md-flex align-items-center gap-1.5 ms-2">
-          <router-link
-            to="/"
-            :class="['nav-link-tab', { active: route.path === '/' }]"
-          >
-            <i class="bi bi-speedometer2"></i>
-            <span>Dashboard</span>
-          </router-link>
-
-          <router-link
-            to="/reports"
-            :class="['nav-link-tab', { active: route.path.startsWith('/reports') }]"
-          >
-            <i class="bi bi-file-earmark-bar-graph"></i>
-            <span>Reports</span>
-          </router-link>
-        </nav>
       </div>
 
-      <!-- Right: Subscription Status & User Profile Dropdown -->
+      <!-- Right: Subscription Countdown & User Profile Dropdown -->
       <div class="d-flex align-items-center gap-3">
-        <!-- 30-Day Billing Access Indicator for standard users -->
-        <div v-if="!isAdmin && authStore.isAuthenticated" class="d-none d-sm-flex align-items-center">
+        <!-- Exact Subscription Days Remaining Pill (Approved from 30 Days) -->
+        <div v-if="!isAdmin && authStore.isAuthenticated" class="d-flex align-items-center">
           <div
             :class="[
-              'subscription-pill-badge d-flex align-items-center gap-1.5 px-2.5 py-1 rounded font-monospace',
+              'subscription-pill-badge d-flex align-items-center gap-1.5 px-3 py-1 rounded-pill font-monospace',
               daysRemaining > 5
                 ? 'sub-pill-green'
                 : daysRemaining > 0
                 ? 'sub-pill-amber'
                 : 'sub-pill-red'
             ]"
-            style="font-size: 0.78rem;"
+            style="font-size: 0.8rem; font-weight: 600;"
           >
             <i :class="daysRemaining > 0 ? 'bi bi-clock-history' : 'bi bi-exclamation-octagon-fill'"></i>
-            <span>{{ daysRemaining > 0 ? `${daysRemaining} Days Access` : 'Access Expired' }}</span>
+            <span>{{ daysRemaining > 1 ? `${daysRemaining} Days Left` : daysRemaining === 1 ? '1 Day Left' : 'Access Expired' }}</span>
           </div>
         </div>
 
+        <!-- User Dropdown -->
         <div class="position-relative" @click.stop>
           <button
             type="button"
@@ -137,20 +125,19 @@ const handleLogout = async () => {
               </div>
             </div>
 
-            <!-- Mobile navigation items inside dropdown ONLY for Standard Users -->
-            <template v-if="!isAdmin">
-              <router-link to="/" class="dropdown-item d-md-none text-light d-flex align-items-center gap-2" @click="isDropdownOpen = false">
-                <i class="bi bi-speedometer2 text-primary"></i> Dashboard
-              </router-link>
-              <router-link to="/reports" class="dropdown-item d-md-none text-light d-flex align-items-center gap-2" @click="isDropdownOpen = false">
-                <i class="bi bi-file-earmark-bar-graph text-info"></i> Reports
-              </router-link>
-              <div class="dropdown-divider border-secondary d-md-none"></div>
-            </template>
+            <!-- Admin users link -->
+            <router-link
+              v-if="isAdmin"
+              to="/users"
+              class="dropdown-item text-light d-flex align-items-center gap-2"
+              @click="isDropdownOpen = false"
+            >
+              <i class="bi bi-people-fill text-primary"></i> User &amp; Billing
+            </router-link>
 
             <button
               type="button"
-              class="dropdown-item text-danger d-flex align-items-center gap-2"
+              class="dropdown-item text-danger d-flex align-items-center gap-2 mt-1"
               @click="handleLogout"
             >
               <i class="bi bi-box-arrow-right"></i> Sign Out
@@ -163,101 +150,69 @@ const handleLogout = async () => {
 </template>
 
 <style scoped>
-.idp-navbar {
-  height: 64px;
-  background: rgba(15, 23, 42, 0.94);
-  backdrop-filter: blur(12px);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-  position: sticky;
-  top: 0;
-  z-index: 1030;
-}
-
-.idp-brand {
-  color: #fff;
-  transition: opacity 0.2s ease;
-}
-.idp-brand:hover {
-  opacity: 0.9;
-}
-
 .brand-badge-icon {
   width: 38px;
   height: 38px;
-  border-radius: 10px;
   background: linear-gradient(135deg, rgba(251, 191, 36, 0.15), rgba(99, 102, 241, 0.15));
   border: 1px solid rgba(251, 191, 36, 0.35);
+  border-radius: 9px;
   display: flex;
   align-items: center;
   justify-content: center;
-  box-shadow: 0 0 15px rgba(251, 191, 36, 0.15);
+  box-shadow: 0 0 12px rgba(251, 191, 36, 0.2);
 }
 
 .brand-title {
-  letter-spacing: -0.02em;
-}
-
-.nav-link-tab {
-  color: #94a3b8;
-  font-size: 0.85rem;
-  font-weight: 500;
-  text-decoration: none;
-  padding: 0.4rem 0.8rem;
-  border-radius: 6px;
-  display: inline-flex;
-  align-items: center;
-  gap: 0.45rem;
-  transition: all 0.15s ease;
-}
-
-.nav-link-tab:hover {
-  color: #f1f5f9;
-  background: rgba(255, 255, 255, 0.05);
-}
-
-.nav-link-tab.active {
-  color: #38bdf8;
-  background: rgba(56, 189, 248, 0.12);
-  border: 1px solid rgba(56, 189, 248, 0.25);
-}
-
-.nav-link-admin.active {
-  color: #fbbf24 !important;
-  background: rgba(245, 158, 11, 0.12) !important;
-  border-color: rgba(245, 158, 11, 0.3) !important;
+  letter-spacing: -0.3px;
 }
 
 .subscription-pill-badge {
-  line-height: 1.2;
+  border: 1px solid transparent;
+  transition: all 0.2s ease;
 }
 
 .sub-pill-green {
-  background: rgba(34, 197, 94, 0.14) !important;
-  color: #4ade80 !important;
-  border: 1px solid rgba(34, 197, 94, 0.3) !important;
+  background: rgba(34, 197, 94, 0.12);
+  border-color: rgba(34, 197, 94, 0.35);
+  color: #4ade80;
 }
 
 .sub-pill-amber {
-  background: rgba(245, 158, 11, 0.14) !important;
-  color: #fbbf24 !important;
-  border: 1px solid rgba(245, 158, 11, 0.3) !important;
+  background: rgba(245, 158, 11, 0.12);
+  border-color: rgba(245, 158, 11, 0.35);
+  color: #fbbf24;
 }
 
 .sub-pill-red {
-  background: rgba(239, 68, 68, 0.14) !important;
-  color: #f87171 !important;
-  border: 1px solid rgba(239, 68, 68, 0.3) !important;
+  background: rgba(239, 68, 68, 0.15);
+  border-color: rgba(239, 68, 68, 0.35);
+  color: #f87171;
 }
 
 .user-avatar-circle {
-  width: 26px;
-  height: 26px;
+  width: 24px;
+  height: 24px;
+  background: rgba(56, 189, 248, 0.15);
   border-radius: 50%;
-  background: rgba(59, 130, 246, 0.2);
   display: flex;
   align-items: center;
   justify-content: center;
   font-size: 0.85rem;
 }
-</style>
 
+.dropdown-menu {
+  background: #131926 !important;
+  border: 1px solid #1e293b !important;
+}
+
+.dropdown-item {
+  color: #cbd5e1 !important;
+  padding: 0.5rem 1rem;
+  font-size: 0.85rem;
+}
+
+.dropdown-item:hover {
+  background: #1e293b !important;
+  color: #ffffff !important;
+}
+</style>

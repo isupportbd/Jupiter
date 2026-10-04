@@ -21,7 +21,7 @@ const showContactModal = ref(false);
     <footer class="idp-footer">
       <div class="idp-grid-container h-100 d-flex align-items-center justify-content-between px-3">
         <span class="text-muted small fst-italic">
-          &copy; Bond Data Analysis V2 2026-2029 <span class="heart-icon">💖</span> created by <a href="https://isupportbd.com" target="_blank" class="text-primary text-decoration-none fw-normal">iSupportBD</a>
+          &copy; Jupiter {{ new Date().getFullYear() }} <span class="heart-icon">💖</span> created by <a href="https://isupportbd.com" target="_blank" class="text-primary text-decoration-none fw-normal">iSupportBD</a>
         </span>
         <div class="d-flex align-items-center gap-3">
           <a href="https://isupportbd.com" target="_blank" class="text-primary text-decoration-none small footer-link">About</a>
