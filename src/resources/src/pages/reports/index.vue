@@ -573,7 +573,7 @@ const exportToExcel = async () => {
     workbook.created = new Date();
 
     const isAllData = activeTab.value === "all_data";
-    const sheet = workbook.addWorksheet(isAllData ? "All Data Report" : "Beneficiary Report", {
+    const sheet = workbook.addWorksheet(isAllData ? "Local LC Report" : "Beneficiary Report", {
       views: [{ showGridLines: true }]
     });
 
@@ -777,7 +777,7 @@ const exportToExcel = async () => {
     const link = document.createElement("a");
     const todayStr = new Date().toISOString().slice(0, 10);
     link.href = url;
-    link.download = isAllData ? `All_Data_Report_${todayStr}.xlsx` : `Beneficiary_Report_${todayStr}.xlsx`;
+    link.download = isAllData ? `Local_LC_Report_${todayStr}.xlsx` : `Beneficiary_Report_${todayStr}.xlsx`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -1105,7 +1105,7 @@ onMounted(() => {
             </button>
           </li>
 
-          <!-- Tab 3: All Data Report (Purple/Indigo Theme) -->
+          <!-- Tab 3: Local LC Report (Purple/Indigo Theme) -->
           <li class="nav-item" role="presentation">
             <button
               type="button"
@@ -1114,7 +1114,7 @@ onMounted(() => {
               @click="setActiveTab('all_data')"
             >
               <i class="bi bi-table me-2 tab-icon-purple"></i>
-              <span>All Data Report</span>
+              <span>Local LC Report</span>
             </button>
           </li>
 
