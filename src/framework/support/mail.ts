@@ -9,17 +9,24 @@ type MailPayload = {
   text?: string;
 };
 
-const isSecure = mailConfig.encryption === "ssl" || Number(mailConfig.port) === 465;
+function getTransport() {
+  const host = (process.env.MAIL_HOST || mailConfig.host || "127.0.0.1").trim();
+  const port = Number(process.env.MAIL_PORT || mailConfig.port || 465);
+  const user = (process.env.MAIL_USERNAME || mailConfig.username || "").trim();
+  const pass = (process.env.MAIL_PASSWORD || mailConfig.password || "").trim();
+  const encryption = (process.env.MAIL_ENCRYPTION || mailConfig.encryption || "ssl").trim().toLowerCase();
+  const isSecure = encryption === "ssl" || port === 465;
 
-const transport = nodemailer.createTransport({
-  host: mailConfig.host,
-  port: Number(mailConfig.port),
-  secure: isSecure,
-  auth: mailConfig.username ? { user: mailConfig.username, pass: mailConfig.password } : undefined,
-  tls: {
-    rejectUnauthorized: false
-  }
-});
+  return nodemailer.createTransport({
+    host,
+    port,
+    secure: isSecure,
+    auth: user && pass ? { user, pass } : undefined,
+    tls: {
+      rejectUnauthorized: false
+    }
+  });
+}
 
 function getEmailHtmlTemplate(title: string, name: string, code: string, desc: string, expiryText: string) {
   return `
@@ -82,7 +89,7 @@ export const mail = {
    * Why: Sends transactional email through configured SMTP transport.
    * When: Features need notifications/password reset/signup email.
    * Where: Jobs and event handlers.
-   * How: Uses nodemailer transport and respects the fail-silent setting.
+   * How: Uses dynamic nodemailer transport and respects the fail-silent setting.
    */
   async sendMail(payload: MailPayload) {
     try {
@@ -97,8 +104,11 @@ export const mail = {
           : undefined);
 
       const fromName = (mailConfig as any).fromName || process.env.MAIL_FROM_NAME || "Jupiter";
-      return await transport.sendMail({
-        from: `"${fromName}" <${mailConfig.fromAddress}>`,
+      const fromAddress = process.env.MAIL_FROM_ADDRESS || mailConfig.fromAddress || "noreply@isupportbd.com";
+      const transport = getTransport();
+
+      const info = await transport.sendMail({
+        from: `"${fromName}" <${fromAddress}>`,
         ...payload,
         text: textFallback,
         headers: {
@@ -107,7 +117,11 @@ export const mail = {
           Auto_Submitted: "auto-generated"
         }
       });
-    } catch (error) {
+
+      console.log(`[SMTP Success] Email delivered to: ${payload.to} (MessageID: ${info?.messageId})`);
+      return info;
+    } catch (error: any) {
+      console.error(`[SMTP Error] Failed to send email to ${payload.to}:`, error?.message || error);
       logger.error("Mail send failed", {
         to: payload.to,
         subject: payload.subject,
