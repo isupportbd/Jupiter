@@ -1,10 +1,12 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from "vue";
 import { useAuthStore } from "@/stores/auth";
+import { useToast } from "@/composables/useToast";
 import axios from "axios";
 import ExcelJS from "exceljs";
 
 const authStore = useAuthStore();
+const toast = useToast();
 
 const isSubscriptionExpired = computed(() => {
   const roleName = String((authStore.user as any)?.role?.name || (authStore.user as any)?.role || "").toLowerCase();
@@ -243,7 +245,9 @@ const fetchLocalLcData = async (page = 1) => {
       }
     }
   } catch (err: any) {
-    error.value = err.response?.data?.message || err.message || "Failed to load Local LC report.";
+    const msg = err.response?.data?.message || err.message || "Failed to load Local LC report.";
+    error.value = msg;
+    toast.error(msg);
   } finally {
     isLoading.value = false;
   }
@@ -293,7 +297,7 @@ const changePage = (page: number) => {
 // ExcelJS Export function
 const exportToExcel = async () => {
   if (isSubscriptionExpired.value) {
-    alert("Your subscription has expired. Excel export is disabled. You can continue viewing reports on screen. Please contact the Administrator to renew.");
+    toast.warning("Your subscription has expired. Excel export is disabled. Please contact the Administrator to renew.");
     return;
   }
   if (totalRecords.value === 0) return;
@@ -534,7 +538,7 @@ const exportToExcel = async () => {
     document.body.removeChild(link);
     window.URL.revokeObjectURL(url);
   } catch (err: any) {
-    alert(err.message || "Failed to export Excel.");
+    toast.error(err.message || "Failed to export Excel.");
   } finally {
     isExporting.value = false;
   }
@@ -596,7 +600,6 @@ const selectedMonthKeys = ref<string[]>([]);
 const isDeleting = ref(false);
 const showDeleteModal = ref(false);
 const deleteTargetMonths = ref<{ key: string; label: string; records: number }[]>([]);
-const deleteSuccessMsg = ref<string | null>(null);
 
 const isAllMonthsSelected = computed(() => {
   return mwRecords.value.length > 0 && selectedMonthKeys.value.length === mwRecords.value.length;
@@ -656,16 +659,13 @@ const executeDelete = async () => {
     });
 
     if (res.data && res.data.success) {
-      deleteSuccessMsg.value = `Successfully deleted records for ${monthsToDelete.length} month(s).`;
-      setTimeout(() => {
-        deleteSuccessMsg.value = null;
-      }, 4000);
+      toast.success(`Successfully deleted records for ${monthsToDelete.length} month(s).`);
       selectedMonthKeys.value = selectedMonthKeys.value.filter((k) => !monthsToDelete.includes(k));
       showDeleteModal.value = false;
       await fetchMonthwiseData();
     }
   } catch (err: any) {
-    alert(err.response?.data?.message || err.message || "Failed to delete records.");
+    toast.error(err.response?.data?.message || err.message || "Failed to delete records.");
   } finally {
     isDeleting.value = false;
   }
@@ -706,6 +706,7 @@ const fetchMonthwiseData = async () => {
     }
   } catch (err: any) {
     console.error("Failed to load Monthwise summary:", err);
+    toast.error(err.response?.data?.message || err.message || "Failed to load Monthwise summary.");
   } finally {
     mwIsLoading.value = false;
   }
@@ -847,7 +848,7 @@ const exportMwToExcel = async () => {
     document.body.removeChild(link);
     window.URL.revokeObjectURL(url);
   } catch (err: any) {
-    alert(err.message || "Failed to export Excel.");
+    toast.error(err.message || "Failed to export Excel.");
   } finally {
     mwIsExporting.value = false;
   }
@@ -1416,12 +1417,6 @@ onMounted(() => {
               </button>
             </div>
           </div>
-        </div>
-
-        <!-- Success Alert upon Deletion -->
-        <div v-if="deleteSuccessMsg" class="alert alert-success p-2 mb-2 small d-flex align-items-center gap-2" role="alert">
-          <i class="bi bi-check-circle-fill fs-5"></i>
-          <span>{{ deleteSuccessMsg }}</span>
         </div>
 
         <!-- Batch Action Bar when Months Selected -->
