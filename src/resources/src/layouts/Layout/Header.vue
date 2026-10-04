@@ -103,20 +103,20 @@ const handleLogout = async () => {
         <div ref="dropdownRef" class="position-relative">
           <button
             type="button"
-            class="btn btn-dark border border-secondary p-1 px-2.5 rounded d-flex align-items-center gap-2"
+            class="user-profile-btn d-flex align-items-center gap-2"
             @click="isDropdownOpen = !isDropdownOpen"
             title="Account Menu"
           >
             <div class="user-avatar-circle">
-              <i class="bi bi-person-fill text-primary"></i>
+              <i class="bi bi-person-fill"></i>
             </div>
-            <span class="text-white small fw-medium d-none d-md-inline">{{ authStore.user?.name || 'User' }}</span>
-            <i class="bi bi-chevron-down text-muted small"></i>
+            <span class="user-name-text d-none d-md-inline">{{ authStore.user?.name || 'User' }}</span>
+            <i class="bi bi-chevron-down dropdown-chevron"></i>
           </button>
 
           <div
             v-if="isDropdownOpen"
-            class="dropdown-menu show dropdown-menu-end position-absolute mt-2 shadow-lg user-dropdown-card"
+            class="dropdown-menu show dropdown-menu-end position-absolute mt-2 user-dropdown-card"
             style="min-width: 240px; z-index: 1060; right: 0 !important; left: auto !important;"
           >
             <!-- User Info Header -->
@@ -225,10 +225,28 @@ const handleLogout = async () => {
   color: #f87171;
 }
 
+.user-profile-btn {
+  background: rgba(19, 25, 38, 0.9);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 9999px;
+  padding: 4px 12px 4px 5px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  outline: none;
+}
+
+.user-profile-btn:hover {
+  background: #1e293b;
+  border-color: rgba(56, 189, 248, 0.35);
+  box-shadow: 0 0 10px rgba(56, 189, 248, 0.15);
+}
+
 .user-avatar-circle {
-  width: 24px;
-  height: 24px;
-  background: rgba(56, 189, 248, 0.15);
+  width: 28px;
+  height: 28px;
+  background: linear-gradient(135deg, rgba(56, 189, 248, 0.2), rgba(99, 102, 241, 0.2));
+  border: 1px solid rgba(56, 189, 248, 0.35);
+  color: #38bdf8;
   border-radius: 50%;
   display: flex;
   align-items: center;
@@ -236,9 +254,25 @@ const handleLogout = async () => {
   font-size: 0.85rem;
 }
 
+.user-name-text {
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: #f1f5f9;
+}
+
+.dropdown-chevron {
+  font-size: 0.72rem;
+  color: #64748b;
+  transition: transform 0.2s ease;
+}
+
+.user-profile-btn:hover .dropdown-chevron {
+  color: #94a3b8;
+}
+
 .user-dropdown-card {
-  background: #0f172a !important;
-  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  background: #131926 !important;
+  border: 1px solid #1e293b !important;
   border-radius: 12px !important;
   box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.6), 0 0 1px 1px rgba(255, 255, 255, 0.05) !important;
   padding: 6px !important;
