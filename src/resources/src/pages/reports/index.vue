@@ -38,8 +38,8 @@ const entryDateFrom = ref("");
 const entryDateTo = ref("");
 
 // Beneficiary suggestions
-const beneficiaryOptions = ref<{ name: string; address: string }[]>([]);
-const localBeneficiarySuggestions = ref<{ name: string; address: string }[]>([]);
+const beneficiaryOptions = ref<string[]>([]);
+const localBeneficiarySuggestions = ref<string[]>([]);
 const showBeneficiaryDropdown = ref(false);
 
 let localBenSearchTimeout: any = null;
@@ -52,7 +52,7 @@ const searchLocalBeneficiariesFromApi = (query: string) => {
     return;
   }
   const filtered = beneficiaryOptions.value
-    .filter((b) => b.name && b.name.toLowerCase().includes(q.toLowerCase()))
+    .filter((name) => name && name.toLowerCase().includes(q.toLowerCase()))
     .slice(0, 50);
   localBeneficiarySuggestions.value = filtered;
   showBeneficiaryDropdown.value = filtered.length > 0;
@@ -63,15 +63,19 @@ const searchLocalBeneficiariesFromApi = (query: string) => {
         params: { search: q }
       });
       if (res.data && res.data.success && Array.isArray(res.data.data)) {
-        localBeneficiarySuggestions.value = res.data.data;
-        showBeneficiaryDropdown.value = res.data.data.length > 0;
+        const rawNames: string[] = res.data.data
+          .map((item: any) => (typeof item === "string" ? item.trim() : String(item?.name || "").trim()))
+          .filter(Boolean);
+        const uniqueNames = Array.from(new Set(rawNames));
+        localBeneficiarySuggestions.value = uniqueNames;
+        showBeneficiaryDropdown.value = uniqueNames.length > 0;
       }
     } catch (_) {}
   }, 150);
 };
 
-const selectBeneficiary = (item: { name: string; address: string }) => {
-  beneficiaryFilter.value = item.name;
+const selectBeneficiary = (name: string) => {
+  beneficiaryFilter.value = name;
   showBeneficiaryDropdown.value = false;
   fetchLocalLcData(1);
 };
@@ -164,10 +168,10 @@ const fetchBeneficiaries = async () => {
     const res = await axios.get("/api/bond/beneficiaries");
     if (res.data && res.data.success) {
       const raw = res.data.data || [];
-      beneficiaryOptions.value = raw.map((item: any) => {
-        if (typeof item === "string") return { name: item, address: "" };
-        return { name: item.name || "", address: item.address || "" };
-      });
+      const names: string[] = raw
+        .map((item: any) => (typeof item === "string" ? item.trim() : String(item?.name || "").trim()))
+        .filter(Boolean);
+      beneficiaryOptions.value = Array.from(new Set(names));
     }
   } catch (_) {}
 };
@@ -947,21 +951,18 @@ onMounted(() => {
                     </button>
                   </div>
 
-                  <!-- Autocomplete dropdown list with Name + Address -->
+                  <!-- Autocomplete dropdown list with Pure Unique Name -->
                   <div
                     v-if="showBeneficiaryDropdown && localBeneficiarySuggestions.length > 0"
                     class="beneficiary-autocomplete-dropdown shadow-lg"
                   >
                     <div
-                      v-for="(item, bIdx) in localBeneficiarySuggestions"
+                      v-for="(name, bIdx) in localBeneficiarySuggestions"
                       :key="bIdx"
                       class="beneficiary-autocomplete-item"
-                      @mousedown.prevent="selectBeneficiary(item)"
+                      @mousedown.prevent="selectBeneficiary(name)"
                     >
-                      <div class="ben-item-name">{{ item.name }}</div>
-                      <div v-if="item.address" class="ben-item-address text-truncate">
-                        <i class="bi bi-geo-alt me-1 text-info opacity-75"></i>{{ item.address }}
-                      </div>
+                      <div class="ben-item-name">{{ name }}</div>
                     </div>
                   </div>
                 </div>

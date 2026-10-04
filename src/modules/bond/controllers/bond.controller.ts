@@ -334,24 +334,27 @@ export const getBeneficiaries: Handler = async (c: any) => {
 
     if (search) {
       whereConditions.push(
-        sql`beneficiary_name ILIKE ${`%${search}%`}`
+        sql`TRIM(beneficiary_name) ILIKE ${`%${search}%`}`
       );
     }
 
     const results = await db
       .select({
-        name: bondRecords.beneficiaryName,
-        address: sql<string>`COALESCE(MAX(beneficiary_address), '')`
+        name: sql<string>`TRIM(beneficiary_name)`
       })
       .from(bondRecords)
       .where(and(...whereConditions))
-      .groupBy(bondRecords.beneficiaryName)
-      .orderBy(bondRecords.beneficiaryName)
+      .groupBy(sql`TRIM(beneficiary_name)`)
+      .orderBy(sql`TRIM(beneficiary_name) ASC`)
       .limit(100);
+
+    const uniqueNames = results
+      .map((r: any) => String(r.name || "").trim())
+      .filter(Boolean);
 
     return c.json({
       success: true,
-      data: results
+      data: uniqueNames
     });
   } catch (error: any) {
     return c.json({ message: error.message }, HttpStatusCodes.INTERNAL_SERVER_ERROR);
