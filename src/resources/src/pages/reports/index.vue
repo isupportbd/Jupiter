@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from "vue";
+import { computed, onMounted, ref } from "vue";
 import { useAuthStore } from "@/stores/auth";
 import { useToast } from "@/composables/useToast";
 import axios from "axios";
@@ -18,190 +18,8 @@ const isSubscriptionExpired = computed(() => {
 type TabType = "local_lc" | "all_data" | "monthwise";
 const activeTab = ref<TabType>("local_lc");
 
-// Local LC Report State
-const records = ref<any[]>([]);
-const isLoading = ref(false);
-const isExporting = ref(false);
-const error = ref<string | null>(null);
-
-// Pagination State
-const currentPage = ref(1);
-const pageSize = ref(10);
-const totalRecords = ref(0);
-const totalPages = ref(1);
-const totalLcValue = ref(0);
-
-// Filters State
-const searchQuery = ref("");
-const beneficiarySearchInput = ref("");
-const selectedBeneficiaries = ref<string[]>([]);
-const lcDateFrom = ref("");
-const lcDateTo = ref("");
-const entryDateFrom = ref("");
-const entryDateTo = ref("");
-
-// Beneficiary suggestions & Multi-select State
+// Shared Beneficiary Suggestions pool
 const beneficiaryOptions = ref<string[]>([]);
-const localBeneficiarySuggestions = ref<string[]>([]);
-const showBeneficiaryDropdown = ref(false);
-
-const beneficiaryPlaceholder = computed(() => {
-  if (selectedBeneficiaries.value.length === 0) {
-    return "Type to search Beneficiary...";
-  }
-  if (selectedBeneficiaries.value.length === 1) {
-    return selectedBeneficiaries.value[0];
-  }
-  return `${selectedBeneficiaries.value.length} beneficiaries selected`;
-});
-
-const isBeneficiarySelected = (name: string) => {
-  return selectedBeneficiaries.value.includes(name);
-};
-
-const toggleBeneficiary = (name: string) => {
-  const trimmed = (name || "").trim();
-  if (!trimmed) return;
-  const idx = selectedBeneficiaries.value.indexOf(trimmed);
-  if (idx > -1) {
-    selectedBeneficiaries.value.splice(idx, 1);
-  } else {
-    selectedBeneficiaries.value.push(trimmed);
-  }
-  fetchLocalLcData(1);
-};
-
-const clearAllBeneficiaries = () => {
-  selectedBeneficiaries.value = [];
-  beneficiarySearchInput.value = "";
-  showBeneficiaryDropdown.value = false;
-  localBeneficiarySuggestions.value = [];
-  fetchLocalLcData(1);
-};
-
-let localBenSearchTimeout: any = null;
-const searchLocalBeneficiariesFromApi = (query: string) => {
-  clearTimeout(localBenSearchTimeout);
-  const q = (query || "").trim();
-  if (!q) {
-    localBeneficiarySuggestions.value = [];
-    showBeneficiaryDropdown.value = false;
-    return;
-  }
-  const filtered = beneficiaryOptions.value
-    .filter((name) => name && name.toLowerCase().includes(q.toLowerCase()))
-    .slice(0, 50);
-  localBeneficiarySuggestions.value = filtered;
-  showBeneficiaryDropdown.value = filtered.length > 0;
-
-  localBenSearchTimeout = setTimeout(async () => {
-    try {
-      const res = await axios.get("/api/bond/beneficiaries", {
-        params: { search: q }
-      });
-      if (res.data && res.data.success && Array.isArray(res.data.data)) {
-        const rawNames: string[] = res.data.data
-          .map((item: any) => (typeof item === "string" ? item.trim() : String(item?.name || "").trim()))
-          .filter((name: string) => name && name.length > 1 && !/^[.\s,;:-]+$/.test(name));
-        const uniqueNames = Array.from(new Set(rawNames));
-        if (beneficiarySearchInput.value.trim()) {
-          localBeneficiarySuggestions.value = uniqueNames;
-          showBeneficiaryDropdown.value = uniqueNames.length > 0;
-        }
-      }
-    } catch (_) {}
-  }, 150);
-};
-
-const handleBeneficiaryFocus = () => {
-  const q = beneficiarySearchInput.value.trim();
-  if (q) {
-    searchLocalBeneficiariesFromApi(q);
-  }
-};
-
-const handleBeneficiaryInput = () => {
-  const q = beneficiarySearchInput.value.trim();
-  if (!q) {
-    localBeneficiarySuggestions.value = [];
-    showBeneficiaryDropdown.value = false;
-  } else {
-    searchLocalBeneficiariesFromApi(q);
-  }
-  if (selectedBeneficiaries.value.length === 0) {
-    handleSearchInput();
-  }
-};
-
-const handleBeneficiaryBlur = () => {
-  setTimeout(() => {
-    showBeneficiaryDropdown.value = false;
-  }, 250);
-};
-
-const getBeneficiaryParam = () => {
-  if (selectedBeneficiaries.value.length > 0) {
-    return JSON.stringify(selectedBeneficiaries.value);
-  }
-  return beneficiarySearchInput.value.trim() || undefined;
-};
-
-let debounceTimer: any = null;
-
-const hasActiveFilters = computed(() => {
-  return (
-    !!searchQuery.value.trim() ||
-    selectedBeneficiaries.value.length > 0 ||
-    !!beneficiarySearchInput.value.trim() ||
-    !!lcDateFrom.value ||
-    !!lcDateTo.value ||
-    !!entryDateFrom.value ||
-    !!entryDateTo.value
-  );
-});
-
-const applyPreset = (type: "thisMonth" | "last30" | "thisYear") => {
-  const now = new Date();
-  if (type === "thisMonth") {
-    const year = now.getFullYear();
-    const month = String(now.getMonth() + 1).padStart(2, "0");
-    const lastDay = new Date(year, now.getMonth() + 1, 0).getDate();
-    lcDateFrom.value = `${year}-${month}-01`;
-    lcDateTo.value = `${year}-${month}-${String(lastDay).padStart(2, "0")}`;
-  } else if (type === "last30") {
-    const past = new Date();
-    past.setDate(now.getDate() - 30);
-    lcDateFrom.value = past.toISOString().slice(0, 10);
-    lcDateTo.value = now.toISOString().slice(0, 10);
-  } else if (type === "thisYear") {
-    const year = now.getFullYear();
-    lcDateFrom.value = `${year}-01-01`;
-    lcDateTo.value = `${year}-12-31`;
-  }
-  fetchLocalLcData(1);
-};
-
-const clearSearch = () => {
-  searchQuery.value = "";
-  fetchLocalLcData(1);
-};
-
-const clearBeneficiary = () => {
-  clearAllBeneficiaries();
-};
-
-const clearLcDate = () => {
-  lcDateFrom.value = "";
-  lcDateTo.value = "";
-  fetchLocalLcData(1);
-};
-
-const clearEntryDate = () => {
-  entryDateFrom.value = "";
-  entryDateTo.value = "";
-  fetchLocalLcData(1);
-};
-
 const fetchBeneficiaries = async () => {
   try {
     const res = await axios.get("/api/bond/beneficiaries");
@@ -213,66 +31,6 @@ const fetchBeneficiaries = async () => {
       beneficiaryOptions.value = Array.from(new Set(names));
     }
   } catch (_) {}
-};
-
-const fetchLocalLcData = async (page = 1) => {
-  isLoading.value = true;
-  error.value = null;
-  currentPage.value = page;
-
-  try {
-    const res = await axios.get("/api/bond/reports/local-lc", {
-      params: {
-        page: currentPage.value,
-        limit: pageSize.value,
-        search: searchQuery.value || undefined,
-        beneficiary: getBeneficiaryParam(),
-        lcDateFrom: lcDateFrom.value || undefined,
-        lcDateTo: lcDateTo.value || undefined,
-        entryDateFrom: entryDateFrom.value || undefined,
-        entryDateTo: entryDateTo.value || undefined
-      }
-    });
-
-    if (res.data && res.data.success) {
-      records.value = res.data.data || [];
-      const pag = res.data.pagination;
-      if (pag) {
-        totalRecords.value = pag.total || 0;
-        totalPages.value = pag.totalPages || 1;
-        currentPage.value = pag.page || 1;
-        totalLcValue.value = pag.totalLcValue || 0;
-      }
-    }
-  } catch (err: any) {
-    const msg = err.response?.data?.message || err.message || "Failed to load Local LC report.";
-    error.value = msg;
-    toast.error(msg);
-  } finally {
-    isLoading.value = false;
-  }
-};
-
-const handleSearchInput = () => {
-  clearTimeout(debounceTimer);
-  debounceTimer = setTimeout(() => {
-    fetchLocalLcData(1);
-  }, 350);
-};
-
-const handleFilterChange = () => {
-  fetchLocalLcData(1);
-};
-
-const resetFilters = () => {
-  searchQuery.value = "";
-  beneficiarySearchInput.value = "";
-  selectedBeneficiaries.value = [];
-  lcDateFrom.value = "";
-  lcDateTo.value = "";
-  entryDateFrom.value = "";
-  entryDateTo.value = "";
-  fetchLocalLcData(1);
 };
 
 function formatNumber(val: any): string {
@@ -289,31 +47,219 @@ function formatDate(val: any): string {
   return str;
 }
 
-const changePage = (page: number) => {
-  if (page < 1 || page > totalPages.value || page === currentPage.value) return;
-  fetchLocalLcData(page);
+/* =========================================================================
+   1. TAB 1: BENEFICIARY REPORT STATE & METHODS (local_lc)
+   ========================================================================= */
+const benRecords = ref<any[]>([]);
+const benIsLoading = ref(false);
+const benIsExporting = ref(false);
+const benCurrentPage = ref(1);
+const benPageSize = ref(10);
+const benTotalRecords = ref(0);
+const benTotalPages = ref(1);
+
+const benSearchQuery = ref("");
+const benBeneficiaryInput = ref("");
+const benSelectedBeneficiaries = ref<string[]>([]);
+const benLcDateFrom = ref("");
+const benLcDateTo = ref("");
+const benEntryDateFrom = ref("");
+const benEntryDateTo = ref("");
+
+const benSuggestions = ref<string[]>([]);
+const benShowDropdown = ref(false);
+
+const benBeneficiaryPlaceholder = computed(() => {
+  if (benSelectedBeneficiaries.value.length === 0) {
+    return "Type to search Beneficiary...";
+  }
+  if (benSelectedBeneficiaries.value.length === 1) {
+    return benSelectedBeneficiaries.value[0];
+  }
+  return `${benSelectedBeneficiaries.value.length} beneficiaries selected`;
+});
+
+const isBenBeneficiarySelected = (name: string) => {
+  return benSelectedBeneficiaries.value.includes(name);
 };
 
-// ExcelJS Export function
-const exportToExcel = async () => {
+const toggleBenBeneficiary = (name: string) => {
+  const trimmed = (name || "").trim();
+  if (!trimmed) return;
+  const idx = benSelectedBeneficiaries.value.indexOf(trimmed);
+  if (idx > -1) {
+    benSelectedBeneficiaries.value.splice(idx, 1);
+  } else {
+    benSelectedBeneficiaries.value.push(trimmed);
+  }
+  fetchBeneficiaryData(1);
+};
+
+const clearBenBeneficiaries = () => {
+  benSelectedBeneficiaries.value = [];
+  benBeneficiaryInput.value = "";
+  benShowDropdown.value = false;
+  benSuggestions.value = [];
+  fetchBeneficiaryData(1);
+};
+
+let benSearchTimeout: any = null;
+const searchBenBeneficiariesFromApi = (query: string) => {
+  clearTimeout(benSearchTimeout);
+  const q = (query || "").trim();
+  if (!q) {
+    benSuggestions.value = [];
+    benShowDropdown.value = false;
+    return;
+  }
+  const filtered = beneficiaryOptions.value
+    .filter((name) => name && name.toLowerCase().includes(q.toLowerCase()))
+    .slice(0, 50);
+  benSuggestions.value = filtered;
+  benShowDropdown.value = filtered.length > 0;
+
+  benSearchTimeout = setTimeout(async () => {
+    try {
+      const res = await axios.get("/api/bond/beneficiaries", { params: { search: q } });
+      if (res.data && res.data.success && Array.isArray(res.data.data)) {
+        const rawNames: string[] = res.data.data
+          .map((item: any) => (typeof item === "string" ? item.trim() : String(item?.name || "").trim()))
+          .filter((name: string) => name && name.length > 1 && !/^[.\s,;:-]+$/.test(name));
+        const uniqueNames = Array.from(new Set(rawNames));
+        if (benBeneficiaryInput.value.trim()) {
+          benSuggestions.value = uniqueNames;
+          benShowDropdown.value = uniqueNames.length > 0;
+        }
+      }
+    } catch (_) {}
+  }, 150);
+};
+
+const handleBenBeneficiaryFocus = () => {
+  const q = benBeneficiaryInput.value.trim();
+  if (q) searchBenBeneficiariesFromApi(q);
+};
+
+const handleBenBeneficiaryInput = () => {
+  const q = benBeneficiaryInput.value.trim();
+  if (!q) {
+    benSuggestions.value = [];
+    benShowDropdown.value = false;
+  } else {
+    searchBenBeneficiariesFromApi(q);
+  }
+  if (benSelectedBeneficiaries.value.length === 0) {
+    handleBenSearchInput();
+  }
+};
+
+const handleBenBeneficiaryBlur = () => {
+  setTimeout(() => {
+    benShowDropdown.value = false;
+  }, 250);
+};
+
+const getBenBeneficiaryParam = () => {
+  if (benSelectedBeneficiaries.value.length > 0) {
+    return JSON.stringify(benSelectedBeneficiaries.value);
+  }
+  return benBeneficiaryInput.value.trim() || undefined;
+};
+
+let benDebounceTimer: any = null;
+const handleBenSearchInput = () => {
+  clearTimeout(benDebounceTimer);
+  benDebounceTimer = setTimeout(() => {
+    fetchBeneficiaryData(1);
+  }, 350);
+};
+
+const clearBenSearch = () => {
+  benSearchQuery.value = "";
+  fetchBeneficiaryData(1);
+};
+
+const clearBenLcDate = () => {
+  benLcDateFrom.value = "";
+  benLcDateTo.value = "";
+  fetchBeneficiaryData(1);
+};
+
+const clearBenEntryDate = () => {
+  benEntryDateFrom.value = "";
+  benEntryDateTo.value = "";
+  fetchBeneficiaryData(1);
+};
+
+const resetBenFilters = () => {
+  benSearchQuery.value = "";
+  benBeneficiaryInput.value = "";
+  benSelectedBeneficiaries.value = [];
+  benLcDateFrom.value = "";
+  benLcDateTo.value = "";
+  benEntryDateFrom.value = "";
+  benEntryDateTo.value = "";
+  fetchBeneficiaryData(1);
+};
+
+const fetchBeneficiaryData = async (page = 1) => {
+  benIsLoading.value = true;
+  benCurrentPage.value = page;
+
+  try {
+    const res = await axios.get("/api/bond/reports/local-lc", {
+      params: {
+        page: benCurrentPage.value,
+        limit: benPageSize.value,
+        search: benSearchQuery.value || undefined,
+        beneficiary: getBenBeneficiaryParam(),
+        lcDateFrom: benLcDateFrom.value || undefined,
+        lcDateTo: benLcDateTo.value || undefined,
+        entryDateFrom: benEntryDateFrom.value || undefined,
+        entryDateTo: benEntryDateTo.value || undefined
+      }
+    });
+
+    if (res.data && res.data.success) {
+      benRecords.value = res.data.data || [];
+      const pag = res.data.pagination;
+      if (pag) {
+        benTotalRecords.value = pag.total || 0;
+        benTotalPages.value = pag.totalPages || 1;
+        benCurrentPage.value = pag.page || 1;
+      }
+    }
+  } catch (err: any) {
+    const msg = err.response?.data?.message || err.message || "Failed to load Beneficiary report.";
+    toast.error(msg);
+  } finally {
+    benIsLoading.value = false;
+  }
+};
+
+const changeBenPage = (page: number) => {
+  if (page < 1 || page > benTotalPages.value || page === benCurrentPage.value) return;
+  fetchBeneficiaryData(page);
+};
+
+const exportBenToExcel = async () => {
   if (isSubscriptionExpired.value) {
     toast.warning("Your subscription has expired. Excel export is disabled. Please contact the Administrator to renew.");
     return;
   }
-  if (totalRecords.value === 0) return;
-  isExporting.value = true;
+  if (benTotalRecords.value === 0) return;
+  benIsExporting.value = true;
 
   try {
-    // 1. Fetch all matching filtered records from backend
     const res = await axios.get("/api/bond/reports/local-lc", {
       params: {
         export: "true",
-        search: searchQuery.value || undefined,
-        beneficiary: getBeneficiaryParam(),
-        lcDateFrom: lcDateFrom.value || undefined,
-        lcDateTo: lcDateTo.value || undefined,
-        entryDateFrom: entryDateFrom.value || undefined,
-        entryDateTo: entryDateTo.value || undefined
+        search: benSearchQuery.value || undefined,
+        beneficiary: getBenBeneficiaryParam(),
+        lcDateFrom: benLcDateFrom.value || undefined,
+        lcDateTo: benLcDateTo.value || undefined,
+        entryDateFrom: benEntryDateFrom.value || undefined,
+        entryDateTo: benEntryDateTo.value || undefined
       }
     });
 
@@ -322,90 +268,35 @@ const exportToExcel = async () => {
       throw new Error("No data available to export.");
     }
 
-    // 2. Create ExcelJS Workbook and Sheet
     const workbook = new ExcelJS.Workbook();
     workbook.creator = "Jupiter";
     workbook.created = new Date();
 
-    const isAllData = activeTab.value === "all_data";
-    const sheet = workbook.addWorksheet(isAllData ? "Local LC Report" : "Beneficiary Report", {
+    const sheet = workbook.addWorksheet("Beneficiary Report", {
       views: [{ showGridLines: true }]
     });
 
-    // 3. Define Columns
-    if (isAllData) {
-      sheet.columns = [
-        { header: "#", key: "sl", width: 6 },
-        { header: "BANK_NAME", key: "bankName", width: 25 },
-        { header: "BRANCH_NAME", key: "branchName", width: 20 },
-        { header: "ADS_CODE", key: "adsCode", width: 14 },
-        { header: "LC_YEAR", key: "lcYear", width: 12 },
-        { header: "LC_NATURE", key: "lcNature", width: 14 },
-        { header: "LC_SERIAL", key: "lcSerial", width: 14 },
-        { header: "LC ID", key: "lcId", width: 20 },
-        { header: "LC_VALUE", key: "lcValue", width: 18 },
-        { header: "CURRENCY", key: "currency", width: 12 },
-        { header: "LC_DATE", key: "lcDate", width: 14 },
-        { header: "LC_EXPIRY_DATE", key: "lcExpiryDate", width: 16 },
-        { header: "BB_USANSE_PERIOD", key: "bbUsansePeriod", width: 18 },
-        { header: "LAST_SHIP_DATE", key: "lastShipDate", width: 16 },
-        { header: "PROCEEDS_DATE", key: "proceedsDate", width: 16 },
-        { header: "APPLICANT_NAME", key: "applicantName", width: 26 },
-        { header: "IRC", key: "irc", width: 14 },
-        { header: "EXPORTER_INFO", key: "exporterInfo", width: 28 },
-        { header: "EXPORT_LC_NUMBER", key: "exportLcNumber", width: 20 },
-        { header: "BENEFICIARY_BANK", key: "beneficiaryBank", width: 24 },
-        { header: "BENEFICIARY_BRANCH", key: "beneficiaryBranch", width: 20 },
-        { header: "BENEFICIARY_NAME", key: "beneficiaryName", width: 28 },
-        { header: "BENEFICIARY_ADDRESS", key: "beneficiaryAddress", width: 34 },
-        { header: "BENEFICIARY_IRC", key: "beneficiaryIrc", width: 16 },
-        { header: "BENEFICIARY_ERC", key: "beneficiaryErc", width: 16 },
-        { header: "PI_NUMBER", key: "piNumber", width: 18 },
-        { header: "PI_DATE", key: "piDate", width: 14 },
-        { header: "BOND_LICENSE", key: "bondLicense", width: 18 },
-        { header: "ACCEPTED", key: "accepted", width: 14 },
-        { header: "CANCEL_YN", key: "cancelYn", width: 12 },
-        { header: "CANCEL_CAUSE", key: "cancelCause", width: 20 },
-        { header: "ENTRY_DATE", key: "entryDate", width: 14 }
-      ];
-    } else {
-      sheet.columns = [
-        { header: "#", key: "sl", width: 6 },
-        { header: "BENEFICIARY_NAME", key: "beneficiaryName", width: 28 },
-        { header: "BENEFICIARY_ADDRESS", key: "beneficiaryAddress", width: 34 },
-        { header: "BANK_NAME", key: "bankName", width: 28 },
-        { header: "BRANCH_NAME", key: "branchName", width: 24 },
-        { header: "LC ID", key: "lcId", width: 20 },
-        { header: "LC_VALUE", key: "lcValue", width: 18 },
-        { header: "LC_DATE", key: "lcDate", width: 14 },
-        { header: "LC_EXPIRY_DATE", key: "lcExpiryDate", width: 16 },
-        { header: "EXPORTER_INFO", key: "exporterInfo", width: 30 },
-        { header: "BENEFICIARY_BANK", key: "beneficiaryBank", width: 28 },
-        { header: "ENTRY_DATE", key: "entryDate", width: 14 }
-      ];
-    }
+    sheet.columns = [
+      { header: "#", key: "sl", width: 6 },
+      { header: "BENEFICIARY_NAME", key: "beneficiaryName", width: 28 },
+      { header: "BENEFICIARY_ADDRESS", key: "beneficiaryAddress", width: 34 },
+      { header: "BANK_NAME", key: "bankName", width: 28 },
+      { header: "BRANCH_NAME", key: "branchName", width: 24 },
+      { header: "LC ID", key: "lcId", width: 20 },
+      { header: "LC_VALUE", key: "lcValue", width: 18 },
+      { header: "LC_DATE", key: "lcDate", width: 14 },
+      { header: "LC_EXPIRY_DATE", key: "lcExpiryDate", width: 16 },
+      { header: "EXPORTER_INFO", key: "exporterInfo", width: 30 },
+      { header: "BENEFICIARY_BANK", key: "beneficiaryBank", width: 28 },
+      { header: "ENTRY_DATE", key: "entryDate", width: 14 }
+    ];
 
-    // 4. Style Header Row
     const headerRow = sheet.getRow(1);
     headerRow.height = 28;
-    const valueColIdx = isAllData ? 9 : 7; // LC_VALUE column index
     headerRow.eachCell((cell, colNumber) => {
-      cell.fill = {
-        type: "pattern",
-        pattern: "solid",
-        fgColor: { argb: isAllData ? "581C87" : "1E293B" }
-      };
-      cell.font = {
-        name: "Calibri",
-        size: 11,
-        bold: true,
-        color: { argb: "FFFFFF" }
-      };
-      cell.alignment = {
-        vertical: "middle",
-        horizontal: colNumber === valueColIdx ? "right" : colNumber === 1 ? "center" : "left",
-        wrapText: false
-      };
+      cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "1E293B" } };
+      cell.font = { name: "Calibri", size: 11, bold: true, color: { argb: "FFFFFF" } };
+      cell.alignment = { vertical: "middle", horizontal: colNumber === 7 ? "right" : colNumber === 1 ? "center" : "left" };
       cell.border = {
         top: { style: "thin", color: { argb: "334155" } },
         left: { style: "thin", color: { argb: "334155" } },
@@ -414,125 +305,60 @@ const exportToExcel = async () => {
       };
     });
 
-    // 5. Populate Data Rows
     let sumValue = 0;
     exportRows.forEach((item, index) => {
       const valNum = Number(item.lcValue || 0);
       sumValue += valNum;
-
-      const row = isAllData
-        ? sheet.addRow({
-            sl: index + 1,
-            bankName: item.bankName || "",
-            branchName: item.branchName || "",
-            adsCode: item.adsCode || "",
-            lcYear: item.lcYear || "",
-            lcNature: item.lcNature || "",
-            lcSerial: item.lcSerial || "",
-            lcId: item.lcId || "",
-            lcValue: valNum,
-            currency: item.currency || "USD",
-            lcDate: formatDate(item.lcDate),
-            lcExpiryDate: formatDate(item.lcExpiryDate),
-            bbUsansePeriod: item.bbUsansePeriod || "",
-            lastShipDate: formatDate(item.lastShipDate),
-            proceedsDate: formatDate(item.proceedsDate),
-            applicantName: item.applicantName || "",
-            irc: item.irc || "",
-            exporterInfo: item.exporterInfo || "",
-            exportLcNumber: item.exportLcNumber || "",
-            beneficiaryBank: item.beneficiaryBank || "",
-            beneficiaryBranch: item.beneficiaryBranch || "",
-            beneficiaryName: item.beneficiaryName || "",
-            beneficiaryAddress: item.beneficiaryAddress || "",
-            beneficiaryIrc: item.beneficiaryIrc || "",
-            beneficiaryErc: item.beneficiaryErc || "",
-            piNumber: item.piNumber || "",
-            piDate: formatDate(item.piDate),
-            bondLicense: item.bondLicense || "",
-            accepted: item.accepted || "",
-            cancelYn: item.cancelYn || "N",
-            cancelCause: item.cancelCause || "",
-            entryDate: formatDate(item.entryDate)
-          })
-        : sheet.addRow({
-            sl: index + 1,
-            beneficiaryName: item.beneficiaryName || "",
-            beneficiaryAddress: item.beneficiaryAddress || "",
-            bankName: item.bankName || "",
-            branchName: item.branchName || "",
-            lcId: item.lcId || "",
-            lcValue: valNum,
-            lcDate: formatDate(item.lcDate),
-            lcExpiryDate: formatDate(item.lcExpiryDate),
-            exporterInfo: item.exporterInfo || "",
-            beneficiaryBank: item.beneficiaryBank || "",
-            entryDate: formatDate(item.entryDate)
-          });
-
+      const row = sheet.addRow({
+        sl: index + 1,
+        beneficiaryName: item.beneficiaryName || "",
+        beneficiaryAddress: item.beneficiaryAddress || "",
+        bankName: item.bankName || "",
+        branchName: item.branchName || "",
+        lcId: item.lcId || "",
+        lcValue: valNum,
+        lcDate: formatDate(item.lcDate),
+        lcExpiryDate: formatDate(item.lcExpiryDate),
+        exporterInfo: item.exporterInfo || "",
+        beneficiaryBank: item.beneficiaryBank || "",
+        entryDate: formatDate(item.entryDate)
+      });
       row.height = 20;
-
       row.eachCell((cell, colNumber) => {
         cell.font = { name: "Calibri", size: 10 };
-        cell.alignment = {
-          vertical: "middle",
-          horizontal: colNumber === valueColIdx ? "right" : colNumber === 1 ? "center" : "left"
-        };
+        cell.alignment = { vertical: "middle", horizontal: colNumber === 7 ? "right" : colNumber === 1 ? "center" : "left" };
         cell.border = {
           top: { style: "thin", color: { argb: "E2E8F0" } },
           left: { style: "thin", color: { argb: "E2E8F0" } },
           bottom: { style: "thin", color: { argb: "E2E8F0" } },
           right: { style: "thin", color: { argb: "E2E8F0" } }
         };
-
-        if (colNumber === valueColIdx) {
-          cell.numFmt = "#,##0.00";
-        }
+        if (colNumber === 7) cell.numFmt = "#,##0.00";
       });
     });
 
-    // 6. Add Total Summary Row
-    const totalData: any = { sl: "", lcValue: sumValue };
-    if (isAllData) {
-      totalData.bankName = "Total";
-    } else {
-      totalData.beneficiaryName = "Total";
-    }
-    const totalRow = sheet.addRow(totalData);
-
+    const totalRow = sheet.addRow({ sl: "", beneficiaryName: "Total", lcValue: sumValue });
     totalRow.height = 24;
     totalRow.eachCell((cell, colNumber) => {
       cell.font = { name: "Calibri", size: 11, bold: true };
-      cell.fill = {
-        type: "pattern",
-        pattern: "solid",
-        fgColor: { argb: "F1F5F9" }
-      };
-      cell.alignment = {
-        vertical: "middle",
-        horizontal: colNumber === valueColIdx ? "right" : "left"
-      };
+      cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "F1F5F9" } };
+      cell.alignment = { vertical: "middle", horizontal: colNumber === 7 ? "right" : "left" };
       cell.border = {
         top: { style: "medium", color: { argb: "475569" } },
         left: { style: "thin", color: { argb: "CBD5E1" } },
         bottom: { style: "double", color: { argb: "0F172A" } },
         right: { style: "thin", color: { argb: "CBD5E1" } }
       };
-      if (colNumber === valueColIdx) {
-        cell.numFmt = "#,##0.00";
-      }
+      if (colNumber === 7) cell.numFmt = "#,##0.00";
     });
 
-    // 7. Write to buffer & trigger download
     const buffer = await workbook.xlsx.writeBuffer();
-    const blob = new Blob([buffer], {
-      type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-    });
+    const blob = new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
     const url = window.URL.createObjectURL(blob);
     const link = document.createElement("a");
     const todayStr = new Date().toISOString().slice(0, 10);
     link.href = url;
-    link.download = isAllData ? `Local_LC_Report_${todayStr}.xlsx` : `Beneficiary_Report_${todayStr}.xlsx`;
+    link.download = `Beneficiary_Report_${todayStr}.xlsx`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -540,11 +366,376 @@ const exportToExcel = async () => {
   } catch (err: any) {
     toast.error(err.message || "Failed to export Excel.");
   } finally {
-    isExporting.value = false;
+    benIsExporting.value = false;
   }
 };
 
-// 3. Monthwise Summary State
+/* =========================================================================
+   2. TAB 2: LOCAL LC REPORT STATE & METHODS (all_data)
+   ========================================================================= */
+const lcRecords = ref<any[]>([]);
+const lcIsLoading = ref(false);
+const lcIsExporting = ref(false);
+const lcCurrentPage = ref(1);
+const lcPageSize = ref(10);
+const lcTotalRecords = ref(0);
+const lcTotalPages = ref(1);
+
+const lcSearchQuery = ref("");
+const lcBeneficiaryInput = ref("");
+const lcSelectedBeneficiaries = ref<string[]>([]);
+const lcLcDateFrom = ref("");
+const lcLcDateTo = ref("");
+const lcEntryDateFrom = ref("");
+const lcEntryDateTo = ref("");
+
+const lcSuggestions = ref<string[]>([]);
+const lcShowDropdown = ref(false);
+
+const lcBeneficiaryPlaceholder = computed(() => {
+  if (lcSelectedBeneficiaries.value.length === 0) {
+    return "Type to search Beneficiary...";
+  }
+  if (lcSelectedBeneficiaries.value.length === 1) {
+    return lcSelectedBeneficiaries.value[0];
+  }
+  return `${lcSelectedBeneficiaries.value.length} beneficiaries selected`;
+});
+
+const isLcBeneficiarySelected = (name: string) => {
+  return lcSelectedBeneficiaries.value.includes(name);
+};
+
+const toggleLcBeneficiary = (name: string) => {
+  const trimmed = (name || "").trim();
+  if (!trimmed) return;
+  const idx = lcSelectedBeneficiaries.value.indexOf(trimmed);
+  if (idx > -1) {
+    lcSelectedBeneficiaries.value.splice(idx, 1);
+  } else {
+    lcSelectedBeneficiaries.value.push(trimmed);
+  }
+  fetchLocalLcData(1);
+};
+
+const clearLcBeneficiaries = () => {
+  lcSelectedBeneficiaries.value = [];
+  lcBeneficiaryInput.value = "";
+  lcShowDropdown.value = false;
+  lcSuggestions.value = [];
+  fetchLocalLcData(1);
+};
+
+let lcSearchTimeout: any = null;
+const searchLcBeneficiariesFromApi = (query: string) => {
+  clearTimeout(lcSearchTimeout);
+  const q = (query || "").trim();
+  if (!q) {
+    lcSuggestions.value = [];
+    lcShowDropdown.value = false;
+    return;
+  }
+  const filtered = beneficiaryOptions.value
+    .filter((name) => name && name.toLowerCase().includes(q.toLowerCase()))
+    .slice(0, 50);
+  lcSuggestions.value = filtered;
+  lcShowDropdown.value = filtered.length > 0;
+
+  lcSearchTimeout = setTimeout(async () => {
+    try {
+      const res = await axios.get("/api/bond/beneficiaries", { params: { search: q } });
+      if (res.data && res.data.success && Array.isArray(res.data.data)) {
+        const rawNames: string[] = res.data.data
+          .map((item: any) => (typeof item === "string" ? item.trim() : String(item?.name || "").trim()))
+          .filter((name: string) => name && name.length > 1 && !/^[.\s,;:-]+$/.test(name));
+        const uniqueNames = Array.from(new Set(rawNames));
+        if (lcBeneficiaryInput.value.trim()) {
+          lcSuggestions.value = uniqueNames;
+          lcShowDropdown.value = uniqueNames.length > 0;
+        }
+      }
+    } catch (_) {}
+  }, 150);
+};
+
+const handleLcBeneficiaryFocus = () => {
+  const q = lcBeneficiaryInput.value.trim();
+  if (q) searchLcBeneficiariesFromApi(q);
+};
+
+const handleLcBeneficiaryInput = () => {
+  const q = lcBeneficiaryInput.value.trim();
+  if (!q) {
+    lcSuggestions.value = [];
+    lcShowDropdown.value = false;
+  } else {
+    searchLcBeneficiariesFromApi(q);
+  }
+  if (lcSelectedBeneficiaries.value.length === 0) {
+    handleLcSearchInput();
+  }
+};
+
+const handleLcBeneficiaryBlur = () => {
+  setTimeout(() => {
+    lcShowDropdown.value = false;
+  }, 250);
+};
+
+const getLcBeneficiaryParam = () => {
+  if (lcSelectedBeneficiaries.value.length > 0) {
+    return JSON.stringify(lcSelectedBeneficiaries.value);
+  }
+  return lcBeneficiaryInput.value.trim() || undefined;
+};
+
+let lcDebounceTimer: any = null;
+const handleLcSearchInput = () => {
+  clearTimeout(lcDebounceTimer);
+  lcDebounceTimer = setTimeout(() => {
+    fetchLocalLcData(1);
+  }, 350);
+};
+
+const clearLcSearch = () => {
+  lcSearchQuery.value = "";
+  fetchLocalLcData(1);
+};
+
+const clearLcLcDate = () => {
+  lcLcDateFrom.value = "";
+  lcLcDateTo.value = "";
+  fetchLocalLcData(1);
+};
+
+const clearLcEntryDate = () => {
+  lcEntryDateFrom.value = "";
+  lcEntryDateTo.value = "";
+  fetchLocalLcData(1);
+};
+
+const resetLcFilters = () => {
+  lcSearchQuery.value = "";
+  lcBeneficiaryInput.value = "";
+  lcSelectedBeneficiaries.value = [];
+  lcLcDateFrom.value = "";
+  lcLcDateTo.value = "";
+  lcEntryDateFrom.value = "";
+  lcEntryDateTo.value = "";
+  fetchLocalLcData(1);
+};
+
+const fetchLocalLcData = async (page = 1) => {
+  lcIsLoading.value = true;
+  lcCurrentPage.value = page;
+
+  try {
+    const res = await axios.get("/api/bond/reports/local-lc", {
+      params: {
+        page: lcCurrentPage.value,
+        limit: lcPageSize.value,
+        search: lcSearchQuery.value || undefined,
+        beneficiary: getLcBeneficiaryParam(),
+        lcDateFrom: lcLcDateFrom.value || undefined,
+        lcDateTo: lcLcDateTo.value || undefined,
+        entryDateFrom: lcEntryDateFrom.value || undefined,
+        entryDateTo: lcEntryDateTo.value || undefined
+      }
+    });
+
+    if (res.data && res.data.success) {
+      lcRecords.value = res.data.data || [];
+      const pag = res.data.pagination;
+      if (pag) {
+        lcTotalRecords.value = pag.total || 0;
+        lcTotalPages.value = pag.totalPages || 1;
+        lcCurrentPage.value = pag.page || 1;
+      }
+    }
+  } catch (err: any) {
+    const msg = err.response?.data?.message || err.message || "Failed to load Local LC report.";
+    toast.error(msg);
+  } finally {
+    lcIsLoading.value = false;
+  }
+};
+
+const changeLcPage = (page: number) => {
+  if (page < 1 || page > lcTotalPages.value || page === lcCurrentPage.value) return;
+  fetchLocalLcData(page);
+};
+
+const exportLcToExcel = async () => {
+  if (isSubscriptionExpired.value) {
+    toast.warning("Your subscription has expired. Excel export is disabled. Please contact the Administrator to renew.");
+    return;
+  }
+  if (lcTotalRecords.value === 0) return;
+  lcIsExporting.value = true;
+
+  try {
+    const res = await axios.get("/api/bond/reports/local-lc", {
+      params: {
+        export: "true",
+        search: lcSearchQuery.value || undefined,
+        beneficiary: getLcBeneficiaryParam(),
+        lcDateFrom: lcLcDateFrom.value || undefined,
+        lcDateTo: lcLcDateTo.value || undefined,
+        entryDateFrom: lcEntryDateFrom.value || undefined,
+        entryDateTo: lcEntryDateTo.value || undefined
+      }
+    });
+
+    const exportRows: any[] = res.data?.data || [];
+    if (exportRows.length === 0) {
+      throw new Error("No data available to export.");
+    }
+
+    const workbook = new ExcelJS.Workbook();
+    workbook.creator = "Jupiter";
+    workbook.created = new Date();
+
+    const sheet = workbook.addWorksheet("Local LC Report", {
+      views: [{ showGridLines: true }]
+    });
+
+    sheet.columns = [
+      { header: "#", key: "sl", width: 6 },
+      { header: "BANK_NAME", key: "bankName", width: 25 },
+      { header: "BRANCH_NAME", key: "branchName", width: 20 },
+      { header: "ADS_CODE", key: "adsCode", width: 14 },
+      { header: "LC_YEAR", key: "lcYear", width: 12 },
+      { header: "LC_NATURE", key: "lcNature", width: 14 },
+      { header: "LC_SERIAL", key: "lcSerial", width: 14 },
+      { header: "LC ID", key: "lcId", width: 20 },
+      { header: "LC_VALUE", key: "lcValue", width: 18 },
+      { header: "CURRENCY", key: "currency", width: 12 },
+      { header: "LC_DATE", key: "lcDate", width: 14 },
+      { header: "LC_EXPIRY_DATE", key: "lcExpiryDate", width: 16 },
+      { header: "BB_USANSE_PERIOD", key: "bbUsansePeriod", width: 18 },
+      { header: "LAST_SHIP_DATE", key: "lastShipDate", width: 16 },
+      { header: "PROCEEDS_DATE", key: "proceedsDate", width: 16 },
+      { header: "APPLICANT_NAME", key: "applicantName", width: 26 },
+      { header: "IRC", key: "irc", width: 14 },
+      { header: "EXPORTER_INFO", key: "exporterInfo", width: 28 },
+      { header: "EXPORT_LC_NUMBER", key: "exportLcNumber", width: 20 },
+      { header: "BENEFICIARY_BANK", key: "beneficiaryBank", width: 24 },
+      { header: "BENEFICIARY_BRANCH", key: "beneficiaryBranch", width: 20 },
+      { header: "BENEFICIARY_NAME", key: "beneficiaryName", width: 28 },
+      { header: "BENEFICIARY_ADDRESS", key: "beneficiaryAddress", width: 34 },
+      { header: "BENEFICIARY_IRC", key: "beneficiaryIrc", width: 16 },
+      { header: "BENEFICIARY_ERC", key: "beneficiaryErc", width: 16 },
+      { header: "PI_NUMBER", key: "piNumber", width: 18 },
+      { header: "PI_DATE", key: "piDate", width: 14 },
+      { header: "BOND_LICENSE", key: "bondLicense", width: 18 },
+      { header: "ACCEPTED", key: "accepted", width: 14 },
+      { header: "CANCEL_YN", key: "cancelYn", width: 12 },
+      { header: "CANCEL_CAUSE", key: "cancelCause", width: 20 },
+      { header: "ENTRY_DATE", key: "entryDate", width: 14 }
+    ];
+
+    const headerRow = sheet.getRow(1);
+    headerRow.height = 28;
+    headerRow.eachCell((cell, colNumber) => {
+      cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "581C87" } };
+      cell.font = { name: "Calibri", size: 11, bold: true, color: { argb: "FFFFFF" } };
+      cell.alignment = { vertical: "middle", horizontal: colNumber === 9 ? "right" : colNumber === 1 ? "center" : "left" };
+      cell.border = {
+        top: { style: "thin", color: { argb: "334155" } },
+        left: { style: "thin", color: { argb: "334155" } },
+        bottom: { style: "medium", color: { argb: "475569" } },
+        right: { style: "thin", color: { argb: "334155" } }
+      };
+    });
+
+    let sumValue = 0;
+    exportRows.forEach((item, index) => {
+      const valNum = Number(item.lcValue || 0);
+      sumValue += valNum;
+      const row = sheet.addRow({
+        sl: index + 1,
+        bankName: item.bankName || "",
+        branchName: item.branchName || "",
+        adsCode: item.adsCode || "",
+        lcYear: item.lcYear || "",
+        lcNature: item.lcNature || "",
+        lcSerial: item.lcSerial || "",
+        lcId: item.lcId || "",
+        lcValue: valNum,
+        currency: item.currency || "USD",
+        lcDate: formatDate(item.lcDate),
+        lcExpiryDate: formatDate(item.lcExpiryDate),
+        bbUsansePeriod: item.bbUsansePeriod || "",
+        lastShipDate: formatDate(item.lastShipDate),
+        proceedsDate: formatDate(item.proceedsDate),
+        applicantName: item.applicantName || "",
+        irc: item.irc || "",
+        exporterInfo: item.exporterInfo || "",
+        exportLcNumber: item.exportLcNumber || "",
+        beneficiaryBank: item.beneficiaryBank || "",
+        beneficiaryBranch: item.beneficiaryBranch || "",
+        beneficiaryName: item.beneficiaryName || "",
+        beneficiaryAddress: item.beneficiaryAddress || "",
+        beneficiaryIrc: item.beneficiaryIrc || "",
+        beneficiaryErc: item.beneficiaryErc || "",
+        piNumber: item.piNumber || "",
+        piDate: formatDate(item.piDate),
+        bondLicense: item.bondLicense || "",
+        accepted: item.accepted || "",
+        cancelYn: item.cancelYn || "N",
+        cancelCause: item.cancelCause || "",
+        entryDate: formatDate(item.entryDate)
+      });
+      row.height = 20;
+      row.eachCell((cell, colNumber) => {
+        cell.font = { name: "Calibri", size: 10 };
+        cell.alignment = { vertical: "middle", horizontal: colNumber === 9 ? "right" : colNumber === 1 ? "center" : "left" };
+        cell.border = {
+          top: { style: "thin", color: { argb: "E2E8F0" } },
+          left: { style: "thin", color: { argb: "E2E8F0" } },
+          bottom: { style: "thin", color: { argb: "E2E8F0" } },
+          right: { style: "thin", color: { argb: "E2E8F0" } }
+        };
+        if (colNumber === 9) cell.numFmt = "#,##0.00";
+      });
+    });
+
+    const totalRow = sheet.addRow({ sl: "", bankName: "Total", lcValue: sumValue });
+    totalRow.height = 24;
+    totalRow.eachCell((cell, colNumber) => {
+      cell.font = { name: "Calibri", size: 11, bold: true };
+      cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "F1F5F9" } };
+      cell.alignment = { vertical: "middle", horizontal: colNumber === 9 ? "right" : "left" };
+      cell.border = {
+        top: { style: "medium", color: { argb: "475569" } },
+        left: { style: "thin", color: { argb: "CBD5E1" } },
+        bottom: { style: "double", color: { argb: "0F172A" } },
+        right: { style: "thin", color: { argb: "CBD5E1" } }
+      };
+      if (colNumber === 9) cell.numFmt = "#,##0.00";
+    });
+
+    const buffer = await workbook.xlsx.writeBuffer();
+    const blob = new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    const todayStr = new Date().toISOString().slice(0, 10);
+    link.href = url;
+    link.download = `Local_LC_Report_${todayStr}.xlsx`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    window.URL.revokeObjectURL(url);
+  } catch (err: any) {
+    toast.error(err.message || "Failed to export Excel.");
+  } finally {
+    lcIsExporting.value = false;
+  }
+};
+
+/* =========================================================================
+   3. TAB 3: MONTHWISE SUMMARY STATE & METHODS (monthwise)
+   ========================================================================= */
 const mwRecords = ref<any[]>([]);
 const mwIsLoading = ref(false);
 const mwIsExporting = ref(false);
@@ -595,7 +786,6 @@ const displaySummaryTotalBank = computed(() => {
     : (mwSummary.value.totalBankRegular ?? mwSummary.value.totalBank ?? 0);
 });
 
-// Monthwise Selection & Deletion State
 const selectedMonthKeys = ref<string[]>([]);
 const isDeleting = ref(false);
 const showDeleteModal = ref(false);
@@ -654,9 +844,7 @@ const executeDelete = async () => {
   isDeleting.value = true;
   try {
     const monthsToDelete = deleteTargetMonths.value.map((m) => m.key);
-    const res = await axios.post("/api/bond/reports/monthwise/delete", {
-      months: monthsToDelete
-    });
+    const res = await axios.post("/api/bond/reports/monthwise/delete", { months: monthsToDelete });
 
     if (res.data && res.data.success) {
       toast.success(`Successfully deleted records for ${monthsToDelete.length} month(s).`);
@@ -700,7 +888,6 @@ const fetchMonthwiseData = async () => {
         totalBeneficiary: 0,
         totalBank: 0
       };
-      // Filter out any selected keys that no longer exist
       const currentKeys = mwRecords.value.map((r) => r.monthKey);
       selectedMonthKeys.value = selectedMonthKeys.value.filter((k) => currentKeys.includes(k));
     }
@@ -741,7 +928,6 @@ const exportMwToExcel = async () => {
       views: [{ showGridLines: true }]
     });
 
-    // Title Header Block
     sheet.mergeCells("A1:F1");
     const titleCell = sheet.getCell("A1");
     titleCell.value = mwYearFilter.value ? `Monthwise LC Summary Report (${mwYearFilter.value})` : "Monthwise LC Summary Report";
@@ -752,7 +938,6 @@ const exportMwToExcel = async () => {
 
     sheet.addRow([]);
 
-    // Table Columns: #, Month, Total Records, Total LC, Total Beneficiary, Total Bank
     const headerLc = isLcUnique.value ? "Total LC (Unique)" : "Total LC";
     const headerBen = isBenUnique.value ? "Total Beneficiary (Unique)" : "Total Beneficiary";
     const headerBank = isBankUnique.value ? "Total Bank (Unique)" : "Total Bank";
@@ -790,23 +975,17 @@ const exportMwToExcel = async () => {
       row.height = 20;
       row.eachCell((cell, colNumber) => {
         cell.font = { name: "Calibri", size: 10 };
-        cell.alignment = {
-          vertical: "middle",
-          horizontal: colNumber === 1 ? "center" : colNumber === 2 ? "left" : "right"
-        };
+        cell.alignment = { vertical: "middle", horizontal: colNumber === 1 ? "center" : colNumber === 2 ? "left" : "right" };
         cell.border = {
           top: { style: "thin", color: { argb: "E2E8F0" } },
           left: { style: "thin", color: { argb: "E2E8F0" } },
           bottom: { style: "thin", color: { argb: "E2E8F0" } },
           right: { style: "thin", color: { argb: "E2E8F0" } }
         };
-        if (colNumber >= 3) {
-          cell.numFmt = "#,##0";
-        }
+        if (colNumber >= 3) cell.numFmt = "#,##0";
       });
     });
 
-    // Total Row
     const totalRow = sheet.addRow({
       sl: "",
       month: "Total",
@@ -819,25 +998,18 @@ const exportMwToExcel = async () => {
     totalRow.eachCell((cell, colNumber) => {
       cell.font = { name: "Calibri", size: 11, bold: true };
       cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "F1F5F9" } };
-      cell.alignment = {
-        vertical: "middle",
-        horizontal: colNumber === 1 ? "center" : colNumber === 2 ? "left" : "right"
-      };
+      cell.alignment = { vertical: "middle", horizontal: colNumber === 1 ? "center" : colNumber === 2 ? "left" : "right" };
       cell.border = {
         top: { style: "medium", color: { argb: "475569" } },
         left: { style: "thin", color: { argb: "CBD5E1" } },
         bottom: { style: "double", color: { argb: "0F172A" } },
         right: { style: "thin", color: { argb: "CBD5E1" } }
       };
-      if (colNumber >= 3) {
-        cell.numFmt = "#,##0";
-      }
+      if (colNumber >= 3) cell.numFmt = "#,##0";
     });
 
     const buffer = await workbook.xlsx.writeBuffer();
-    const blob = new Blob([buffer], {
-      type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-    });
+    const blob = new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
     const url = window.URL.createObjectURL(blob);
     const link = document.createElement("a");
     const todayStr = new Date().toISOString().slice(0, 10);
@@ -854,9 +1026,14 @@ const exportMwToExcel = async () => {
   }
 };
 
+/* =========================================================================
+   TAB SWITCHING LOGIC (Preserves individual tab filters)
+   ========================================================================= */
 const setActiveTab = (tab: TabType) => {
   activeTab.value = tab;
-  if ((tab === "local_lc" || tab === "all_data") && records.value.length === 0) {
+  if (tab === "local_lc" && benRecords.value.length === 0) {
+    fetchBeneficiaryData(1);
+  } else if (tab === "all_data" && lcRecords.value.length === 0) {
     fetchLocalLcData(1);
   } else if (tab === "monthwise" && mwRecords.value.length === 0) {
     fetchMonthwiseData();
@@ -865,7 +1042,7 @@ const setActiveTab = (tab: TabType) => {
 
 onMounted(() => {
   fetchBeneficiaries();
-  fetchLocalLcData(1);
+  fetchBeneficiaryData(1);
 });
 </script>
 
@@ -888,7 +1065,7 @@ onMounted(() => {
             </button>
           </li>
 
-          <!-- Tab 3: Local LC Report (Purple/Indigo Theme) -->
+          <!-- Tab 2: Local LC Report (Purple/Indigo Theme) -->
           <li class="nav-item" role="presentation">
             <button
               type="button"
@@ -901,7 +1078,7 @@ onMounted(() => {
             </button>
           </li>
 
-          <!-- Tab 4: Monthwise Summary (Amber/Gold Theme) -->
+          <!-- Tab 3: Monthwise Summary (Amber/Gold Theme) -->
           <li class="nav-item" role="presentation">
             <button
               type="button"
@@ -922,9 +1099,11 @@ onMounted(() => {
 
     <!-- Tab Content Area -->
     <div class="tab-content">
-      <!-- Beneficiary Report & Local LC Report Content (shared filters) -->
-      <div v-if="activeTab === 'local_lc' || activeTab === 'all_data'" class="local-lc-tab-pane">
-        <!-- Filter Bar: 4-Column Layout (LC Date Range | Entry Date Range | Beneficiary & Search | Reset & Excel) -->
+      <!-- ===================================================================
+           TAB 1: BENEFICIARY REPORT PANE (Independent Filters + 11 Columns)
+           =================================================================== -->
+      <div v-if="activeTab === 'local_lc'" class="beneficiary-tab-pane">
+        <!-- Filter Bar -->
         <div class="filter-bar mb-3">
           <div class="row g-2 align-items-stretch">
             <!-- 1. LC Date Range -->
@@ -936,30 +1115,30 @@ onMounted(() => {
                     <span>LC Date Range</span>
                   </span>
                   <button
-                    v-if="lcDateFrom || lcDateTo"
+                    v-if="benLcDateFrom || benLcDateTo"
                     type="button"
                     class="btn-clear-date"
-                    @click="clearLcDate"
+                    @click="clearBenLcDate"
                   >
                     Clear
                   </button>
                 </div>
                 <div class="d-flex align-items-center gap-1">
                   <input
-                    v-model="lcDateFrom"
+                    v-model="benLcDateFrom"
                     type="date"
                     class="form-control form-control-sm filter-date-input"
                     title="LC Start Date"
-                    @change="handleFilterChange"
+                    @change="fetchBeneficiaryData(1)"
                   />
                   <span class="text-muted small px-1">to</span>
                   <input
-                    v-model="lcDateTo"
+                    v-model="benLcDateTo"
                     type="date"
                     class="form-control form-control-sm filter-date-input"
-                    :min="lcDateFrom || undefined"
+                    :min="benLcDateFrom || undefined"
                     title="LC End Date"
-                    @change="handleFilterChange"
+                    @change="fetchBeneficiaryData(1)"
                   />
                 </div>
               </div>
@@ -974,104 +1153,101 @@ onMounted(() => {
                     <span>Entry Date Range</span>
                   </span>
                   <button
-                    v-if="entryDateFrom || entryDateTo"
+                    v-if="benEntryDateFrom || benEntryDateTo"
                     type="button"
                     class="btn-clear-date"
-                    @click="clearEntryDate"
+                    @click="clearBenEntryDate"
                   >
                     Clear
                   </button>
                 </div>
                 <div class="d-flex align-items-center gap-1">
                   <input
-                    v-model="entryDateFrom"
+                    v-model="benEntryDateFrom"
                     type="date"
                     class="form-control form-control-sm filter-date-input"
                     title="Entry Start Date"
-                    @change="handleFilterChange"
+                    @change="fetchBeneficiaryData(1)"
                   />
                   <span class="text-muted small px-1">to</span>
                   <input
-                    v-model="entryDateTo"
+                    v-model="benEntryDateTo"
                     type="date"
                     class="form-control form-control-sm filter-date-input"
-                    :min="entryDateFrom || undefined"
+                    :min="benEntryDateFrom || undefined"
                     title="Entry End Date"
-                    @change="handleFilterChange"
+                    @change="fetchBeneficiaryData(1)"
                   />
                 </div>
               </div>
             </div>
 
-            <!-- 3. Beneficiary Name (Top) & Search (Bottom) -->
+            <!-- 3. Beneficiary Name & Search -->
             <div class="col-12 col-md-6 col-lg">
               <div class="d-flex flex-column justify-content-between h-100 gap-1">
-                <!-- Direct Beneficiary Input with Live Search & Dropdown Checkmark Toggle -->
                 <div class="position-relative w-100">
                   <div class="input-group input-group-sm">
                     <span class="input-group-text filter-addon" title="Beneficiary Filter">
                       <i class="bi bi-person-badge"></i>
                     </span>
                     <input
-                      v-model="beneficiarySearchInput"
+                      v-model="benBeneficiaryInput"
                       type="text"
                       class="form-control form-control-sm filter-input"
-                      :placeholder="beneficiaryPlaceholder"
+                      :placeholder="benBeneficiaryPlaceholder"
                       autocomplete="off"
-                      @focus="handleBeneficiaryFocus"
-                      @input="handleBeneficiaryInput"
-                      @blur="handleBeneficiaryBlur"
-                      @keydown.esc="showBeneficiaryDropdown = false"
+                      @focus="handleBenBeneficiaryFocus"
+                      @input="handleBenBeneficiaryInput"
+                      @blur="handleBenBeneficiaryBlur"
+                      @keydown.esc="benShowDropdown = false"
                     />
                     <button
-                      v-if="selectedBeneficiaries.length > 0 || beneficiarySearchInput"
+                      v-if="benSelectedBeneficiaries.length > 0 || benBeneficiaryInput"
                       type="button"
                       class="btn filter-clear-btn"
                       title="Clear Beneficiary Filter"
-                      @click="clearAllBeneficiaries"
+                      @click="clearBenBeneficiaries"
                     >
                       <i class="bi bi-x"></i>
                     </button>
                   </div>
 
-                  <!-- Autocomplete Dropdown with Clean Checkmarks (No Box Border, No Inner Search) -->
                   <div
-                    v-if="showBeneficiaryDropdown && localBeneficiarySuggestions.length > 0"
+                    v-if="benShowDropdown && benSuggestions.length > 0"
                     class="beneficiary-autocomplete-dropdown shadow-lg"
                   >
                     <div
-                      v-for="(name, bIdx) in localBeneficiarySuggestions"
+                      v-for="(name, bIdx) in benSuggestions"
                       :key="bIdx"
                       class="ben-dropdown-item d-flex align-items-center gap-2 px-3 py-2 cursor-pointer"
-                      :class="{ 'is-selected': isBeneficiarySelected(name) }"
-                      @mousedown.prevent="toggleBeneficiary(name)"
+                      :class="{ 'is-selected': isBenBeneficiarySelected(name) }"
+                      @mousedown.prevent="toggleBenBeneficiary(name)"
                     >
                       <div class="ben-check-slot flex-shrink-0 d-flex align-items-center justify-content-center">
-                        <i v-if="isBeneficiarySelected(name)" class="bi bi-check2 text-white fs-6 fw-bold"></i>
+                        <i v-if="isBenBeneficiarySelected(name)" class="bi bi-check2 text-white fs-6 fw-bold"></i>
                       </div>
                       <span class="ben-item-name text-white small text-truncate">{{ name }}</span>
                     </div>
                   </div>
                 </div>
 
-                <!-- Search Input -->
                 <div class="input-group input-group-sm">
                   <span class="input-group-text filter-addon" title="Search">
                     <i class="bi bi-search"></i>
                   </span>
                   <input
-                    v-model="searchQuery"
+                    v-model="benSearchQuery"
                     type="text"
                     class="form-control form-control-sm filter-input"
                     placeholder="Search"
-                    @input="handleSearchInput"
+                    @input="handleBenSearchInput"
                   />
                   <button
-                    v-if="searchQuery"
+                    v-if="benSearchQuery"
                     type="button"
                     class="btn filter-clear-btn"
                     title="Clear Search"
-                    @click="clearSearch"
+                    @click="clearBenSearch"
                   >
                     <i class="bi bi-x"></i>
                   </button>
@@ -1079,54 +1255,44 @@ onMounted(() => {
               </div>
             </div>
 
-            <!-- 4. Reset Button (Top) & Excel Button (Bottom) -->
+            <!-- 4. Reset & Excel -->
             <div class="col-auto">
               <div class="d-flex flex-column justify-content-between h-100 gap-1">
-                <!-- Reset Button -->
                 <button
                   type="button"
                   class="btn-reset-filter justify-content-center"
                   title="Clear all filters"
-                  @click="resetFilters"
+                  @click="resetBenFilters"
                 >
                   <i class="bi bi-arrow-counterclockwise"></i>
                   <span>Reset</span>
                 </button>
 
-                <!-- Excel Export Button -->
                 <button
                   type="button"
                   class="btn-export-excel justify-content-center"
-                  :disabled="isExporting || totalRecords === 0"
+                  :disabled="benIsExporting || benTotalRecords === 0"
                   title="Download formatted Excel file"
-                  @click="exportToExcel"
+                  @click="exportBenToExcel"
                 >
-                  <span v-if="isExporting" class="spinner-border spinner-border-sm"></span>
+                  <span v-if="benIsExporting" class="spinner-border spinner-border-sm"></span>
                   <i v-else class="bi bi-file-earmark-excel"></i>
-                  <span>{{ isExporting ? 'Exporting...' : 'Excel' }}</span>
+                  <span>{{ benIsExporting ? 'Exporting...' : 'Excel' }}</span>
                 </button>
               </div>
             </div>
           </div>
         </div>
 
-        <!-- Error Alert -->
-        <div v-if="error" class="alert alert-danger p-2 mb-2 small" role="alert">
-          <i class="bi bi-exclamation-triangle-fill me-2"></i>
-          {{ error }}
-        </div>
-
-        <!-- 11-Column Local LC Table Card Container -->
+        <!-- 11-Column Beneficiary Table Container -->
         <div class="table-card-wrapper p-2.5 shadow-sm rounded">
           <div class="jupiter-table-container position-relative">
-            <!-- Loading Spinner Overlay -->
-            <div v-if="isLoading" class="table-loading-overlay d-flex align-items-center justify-content-center">
+            <div v-if="benIsLoading" class="table-loading-overlay d-flex align-items-center justify-content-center">
               <div class="spinner-border text-info spinner-border-sm me-2" role="status"></div>
               <span class="small text-muted font-monospace">Loading records...</span>
             </div>
 
-            <!-- Tab 1: Curated Beneficiary Report Table (11 Columns) -->
-            <table v-if="activeTab === 'local_lc'" class="table jupiter-report-table mb-0 align-middle text-nowrap">
+            <table class="table jupiter-report-table mb-0 align-middle text-nowrap">
               <thead>
                 <tr>
                   <th class="ps-3 text-center" style="width: 45px;">#</th>
@@ -1144,18 +1310,16 @@ onMounted(() => {
                 </tr>
               </thead>
               <tbody>
-                <!-- Empty state -->
-                <tr v-if="!isLoading && records.length === 0">
+                <tr v-if="!benIsLoading && benRecords.length === 0">
                   <td colspan="12" class="text-center py-5 text-muted">
                     <i class="bi bi-inbox display-6 d-block mb-2 text-muted opacity-50"></i>
                     No Beneficiary records matched your search / filters.
                   </td>
                 </tr>
 
-                <!-- Data Rows -->
-                <tr v-for="(row, idx) in records" :key="row.id || idx">
+                <tr v-for="(row, idx) in benRecords" :key="row.id || idx">
                   <td class="ps-3 text-center cell-num">
-                    {{ (currentPage - 1) * pageSize + idx + 1 }}
+                    {{ (benCurrentPage - 1) * benPageSize + idx + 1 }}
                   </td>
                   <td style="max-width: 180px;" class="text-truncate cell-main fw-medium" :title="row.beneficiaryName || ''">
                     {{ row.beneficiaryName || '-' }}
@@ -1177,9 +1341,267 @@ onMounted(() => {
                 </tr>
               </tbody>
             </table>
+          </div>
 
-            <!-- Tab 3: Complete All Data Report Table (All 31 Columns) -->
-            <table v-else-if="activeTab === 'all_data'" class="table jupiter-report-table mb-0 align-middle text-nowrap">
+          <!-- Pagination Footer -->
+          <div class="d-flex align-items-center justify-content-between flex-wrap gap-3 mt-2 pt-2 border-top-subtle">
+            <div class="pagination-info text-muted small">
+              Showing
+              <span class="text-light fw-medium">
+                {{ benTotalRecords === 0 ? 0 : (benCurrentPage - 1) * benPageSize + 1 }}
+              </span>
+              to
+              <span class="text-light fw-medium">
+                {{ Math.min(benCurrentPage * benPageSize, benTotalRecords) }}
+              </span>
+              of
+              <span class="text-light fw-medium">{{ benTotalRecords.toLocaleString() }}</span>
+              entries
+            </div>
+
+            <div class="pagination-controls d-flex align-items-center gap-1">
+              <button
+                type="button"
+                class="btn-page"
+                :disabled="benCurrentPage <= 1 || benIsLoading"
+                title="First Page"
+                @click="changeBenPage(1)"
+              >
+                <i class="bi bi-chevron-double-left"></i>
+              </button>
+
+              <button
+                type="button"
+                class="btn-page"
+                :disabled="benCurrentPage <= 1 || benIsLoading"
+                title="Previous Page"
+                @click="changeBenPage(benCurrentPage - 1)"
+              >
+                <i class="bi bi-chevron-left"></i>
+              </button>
+
+              <span class="page-indicator mx-2">
+                Page <strong class="text-white">{{ benCurrentPage }}</strong> of <strong class="text-white">{{ benTotalPages }}</strong>
+              </span>
+
+              <button
+                type="button"
+                class="btn-page"
+                :disabled="benCurrentPage >= benTotalPages || benIsLoading"
+                title="Next Page"
+                @click="changeBenPage(benCurrentPage + 1)"
+              >
+                <i class="bi bi-chevron-right"></i>
+              </button>
+
+              <button
+                type="button"
+                class="btn-page"
+                :disabled="benCurrentPage >= benTotalPages || benIsLoading"
+                title="Last Page"
+                @click="changeBenPage(benTotalPages)"
+              >
+                <i class="bi bi-chevron-double-right"></i>
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ===================================================================
+           TAB 2: LOCAL LC REPORT PANE (Independent Filters + 31 Columns)
+           =================================================================== -->
+      <div v-if="activeTab === 'all_data'" class="local-lc-tab-pane">
+        <!-- Filter Bar -->
+        <div class="filter-bar mb-3">
+          <div class="row g-2 align-items-stretch">
+            <!-- 1. LC Date Range -->
+            <div class="col-12 col-md-6 col-lg-3">
+              <div class="filter-column-box p-2 rounded">
+                <div class="d-flex justify-content-between align-items-center mb-1">
+                  <span class="filter-label mb-0">
+                    <i class="bi bi-calendar-check text-purple"></i>
+                    <span>LC Date Range</span>
+                  </span>
+                  <button
+                    v-if="lcLcDateFrom || lcLcDateTo"
+                    type="button"
+                    class="btn-clear-date"
+                    @click="clearLcLcDate"
+                  >
+                    Clear
+                  </button>
+                </div>
+                <div class="d-flex align-items-center gap-1">
+                  <input
+                    v-model="lcLcDateFrom"
+                    type="date"
+                    class="form-control form-control-sm filter-date-input"
+                    title="LC Start Date"
+                    @change="fetchLocalLcData(1)"
+                  />
+                  <span class="text-muted small px-1">to</span>
+                  <input
+                    v-model="lcLcDateTo"
+                    type="date"
+                    class="form-control form-control-sm filter-date-input"
+                    :min="lcLcDateFrom || undefined"
+                    title="LC End Date"
+                    @change="fetchLocalLcData(1)"
+                  />
+                </div>
+              </div>
+            </div>
+
+            <!-- 2. Entry Date Range -->
+            <div class="col-12 col-md-6 col-lg-3">
+              <div class="filter-column-box p-2 rounded">
+                <div class="d-flex justify-content-between align-items-center mb-1">
+                  <span class="filter-label mb-0">
+                    <i class="bi bi-clock-history text-purple"></i>
+                    <span>Entry Date Range</span>
+                  </span>
+                  <button
+                    v-if="lcEntryDateFrom || lcEntryDateTo"
+                    type="button"
+                    class="btn-clear-date"
+                    @click="clearLcEntryDate"
+                  >
+                    Clear
+                  </button>
+                </div>
+                <div class="d-flex align-items-center gap-1">
+                  <input
+                    v-model="lcEntryDateFrom"
+                    type="date"
+                    class="form-control form-control-sm filter-date-input"
+                    title="Entry Start Date"
+                    @change="fetchLocalLcData(1)"
+                  />
+                  <span class="text-muted small px-1">to</span>
+                  <input
+                    v-model="lcEntryDateTo"
+                    type="date"
+                    class="form-control form-control-sm filter-date-input"
+                    :min="lcEntryDateFrom || undefined"
+                    title="Entry End Date"
+                    @change="fetchLocalLcData(1)"
+                  />
+                </div>
+              </div>
+            </div>
+
+            <!-- 3. Beneficiary Name & Search -->
+            <div class="col-12 col-md-6 col-lg">
+              <div class="d-flex flex-column justify-content-between h-100 gap-1">
+                <div class="position-relative w-100">
+                  <div class="input-group input-group-sm">
+                    <span class="input-group-text filter-addon" title="Beneficiary Filter">
+                      <i class="bi bi-person-badge"></i>
+                    </span>
+                    <input
+                      v-model="lcBeneficiaryInput"
+                      type="text"
+                      class="form-control form-control-sm filter-input"
+                      :placeholder="lcBeneficiaryPlaceholder"
+                      autocomplete="off"
+                      @focus="handleLcBeneficiaryFocus"
+                      @input="handleLcBeneficiaryInput"
+                      @blur="handleLcBeneficiaryBlur"
+                      @keydown.esc="lcShowDropdown = false"
+                    />
+                    <button
+                      v-if="lcSelectedBeneficiaries.length > 0 || lcBeneficiaryInput"
+                      type="button"
+                      class="btn filter-clear-btn"
+                      title="Clear Beneficiary Filter"
+                      @click="clearLcBeneficiaries"
+                    >
+                      <i class="bi bi-x"></i>
+                    </button>
+                  </div>
+
+                  <div
+                    v-if="lcShowDropdown && lcSuggestions.length > 0"
+                    class="beneficiary-autocomplete-dropdown shadow-lg"
+                  >
+                    <div
+                      v-for="(name, bIdx) in lcSuggestions"
+                      :key="bIdx"
+                      class="ben-dropdown-item d-flex align-items-center gap-2 px-3 py-2 cursor-pointer"
+                      :class="{ 'is-selected': isLcBeneficiarySelected(name) }"
+                      @mousedown.prevent="toggleLcBeneficiary(name)"
+                    >
+                      <div class="ben-check-slot flex-shrink-0 d-flex align-items-center justify-content-center">
+                        <i v-if="isLcBeneficiarySelected(name)" class="bi bi-check2 text-white fs-6 fw-bold"></i>
+                      </div>
+                      <span class="ben-item-name text-white small text-truncate">{{ name }}</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="input-group input-group-sm">
+                  <span class="input-group-text filter-addon" title="Search">
+                    <i class="bi bi-search"></i>
+                  </span>
+                  <input
+                    v-model="lcSearchQuery"
+                    type="text"
+                    class="form-control form-control-sm filter-input"
+                    placeholder="Search"
+                    @input="handleLcSearchInput"
+                  />
+                  <button
+                    v-if="lcSearchQuery"
+                    type="button"
+                    class="btn filter-clear-btn"
+                    title="Clear Search"
+                    @click="clearLcSearch"
+                  >
+                    <i class="bi bi-x"></i>
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <!-- 4. Reset & Excel -->
+            <div class="col-auto">
+              <div class="d-flex flex-column justify-content-between h-100 gap-1">
+                <button
+                  type="button"
+                  class="btn-reset-filter justify-content-center"
+                  title="Clear all filters"
+                  @click="resetLcFilters"
+                >
+                  <i class="bi bi-arrow-counterclockwise"></i>
+                  <span>Reset</span>
+                </button>
+
+                <button
+                  type="button"
+                  class="btn-export-excel justify-content-center"
+                  :disabled="lcIsExporting || lcTotalRecords === 0"
+                  title="Download formatted Excel file"
+                  @click="exportLcToExcel"
+                >
+                  <span v-if="lcIsExporting" class="spinner-border spinner-border-sm"></span>
+                  <i v-else class="bi bi-file-earmark-excel"></i>
+                  <span>{{ lcIsExporting ? 'Exporting...' : 'Excel' }}</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 31-Column Local LC Table Container -->
+        <div class="table-card-wrapper p-2.5 shadow-sm rounded">
+          <div class="jupiter-table-container position-relative">
+            <div v-if="lcIsLoading" class="table-loading-overlay d-flex align-items-center justify-content-center">
+              <div class="spinner-border text-info spinner-border-sm me-2" role="status"></div>
+              <span class="small text-muted font-monospace">Loading records...</span>
+            </div>
+
+            <table class="table jupiter-report-table mb-0 align-middle text-nowrap">
               <thead>
                 <tr>
                   <th class="ps-3 text-center" style="width: 45px;">#</th>
@@ -1217,17 +1639,15 @@ onMounted(() => {
                 </tr>
               </thead>
               <tbody>
-                <!-- Empty state -->
-                <tr v-if="!isLoading && records.length === 0">
+                <tr v-if="!lcIsLoading && lcRecords.length === 0">
                   <td colspan="32" class="text-center py-5 text-muted">
                     <i class="bi bi-inbox display-6 d-block mb-2 text-muted opacity-50"></i>
                     No LC records matched your search / filters.
                   </td>
                 </tr>
 
-                <!-- Data Rows -->
-                <tr v-for="(row, idx) in records" :key="row.id || idx">
-                  <td class="ps-3 text-center cell-num">{{ (currentPage - 1) * pageSize + idx + 1 }}</td>
+                <tr v-for="(row, idx) in lcRecords" :key="row.id || idx">
+                  <td class="ps-3 text-center cell-num">{{ (lcCurrentPage - 1) * lcPageSize + idx + 1 }}</td>
                   <td class="cell-main">{{ row.bankName || '-' }}</td>
                   <td class="cell-muted">{{ row.branchName || '-' }}</td>
                   <td class="cell-muted font-monospace">{{ row.adsCode || '-' }}</td>
@@ -1264,69 +1684,63 @@ onMounted(() => {
             </table>
           </div>
 
-          <!-- 10-per-page Pagination Footer -->
+          <!-- Pagination Footer -->
           <div class="d-flex align-items-center justify-content-between flex-wrap gap-3 mt-2 pt-2 border-top-subtle">
             <div class="pagination-info text-muted small">
               Showing
               <span class="text-light fw-medium">
-                {{ totalRecords === 0 ? 0 : (currentPage - 1) * pageSize + 1 }}
+                {{ lcTotalRecords === 0 ? 0 : (lcCurrentPage - 1) * lcPageSize + 1 }}
               </span>
               to
               <span class="text-light fw-medium">
-                {{ Math.min(currentPage * pageSize, totalRecords) }}
+                {{ Math.min(lcCurrentPage * lcPageSize, lcTotalRecords) }}
               </span>
               of
-              <span class="text-light fw-medium">{{ totalRecords.toLocaleString() }}</span>
+              <span class="text-light fw-medium">{{ lcTotalRecords.toLocaleString() }}</span>
               entries
             </div>
 
-            <!-- Page Buttons -->
             <div class="pagination-controls d-flex align-items-center gap-1">
-              <!-- First Page -->
               <button
                 type="button"
                 class="btn-page"
-                :disabled="currentPage <= 1 || isLoading"
+                :disabled="lcCurrentPage <= 1 || lcIsLoading"
                 title="First Page"
-                @click="changePage(1)"
+                @click="changeLcPage(1)"
               >
                 <i class="bi bi-chevron-double-left"></i>
               </button>
 
-              <!-- Previous Page -->
               <button
                 type="button"
                 class="btn-page"
-                :disabled="currentPage <= 1 || isLoading"
+                :disabled="lcCurrentPage <= 1 || lcIsLoading"
                 title="Previous Page"
-                @click="changePage(currentPage - 1)"
+                @click="changeLcPage(lcCurrentPage - 1)"
               >
                 <i class="bi bi-chevron-left"></i>
               </button>
 
-              <!-- Current / Total Page Badge -->
               <span class="page-indicator mx-2">
-                Page <strong class="text-white">{{ currentPage }}</strong> of <strong class="text-white">{{ totalPages }}</strong>
+                Page <strong class="text-white">{{ lcCurrentPage }}</strong> of <strong class="text-white">{{ lcTotalPages }}</strong>
               </span>
 
-              <!-- Next Page -->
               <button
                 type="button"
                 class="btn-page"
-                :disabled="currentPage >= totalPages || isLoading"
+                :disabled="lcCurrentPage >= lcTotalPages || lcIsLoading"
                 title="Next Page"
-                @click="changePage(currentPage + 1)"
+                @click="changeLcPage(lcCurrentPage + 1)"
               >
                 <i class="bi bi-chevron-right"></i>
               </button>
 
-              <!-- Last Page -->
               <button
                 type="button"
                 class="btn-page"
-                :disabled="currentPage >= totalPages || isLoading"
+                :disabled="lcCurrentPage >= lcTotalPages || lcIsLoading"
                 title="Last Page"
-                @click="changePage(totalPages)"
+                @click="changeLcPage(lcTotalPages)"
               >
                 <i class="bi bi-chevron-double-right"></i>
               </button>
@@ -1335,9 +1749,11 @@ onMounted(() => {
         </div>
       </div>
 
-      <!-- 3. Monthwise Summary Content -->
+      <!-- ===================================================================
+           TAB 3: MONTHWISE SUMMARY PANE
+           =================================================================== -->
       <div v-if="activeTab === 'monthwise'" class="monthwise-tab-pane">
-        <!-- Filter Bar: 2 Compact Filters + Reset & Excel (Centered to match top tabs) -->
+        <!-- Filter Bar -->
         <div class="filter-bar mb-3">
           <div class="d-flex flex-wrap justify-content-center align-items-stretch gap-2">
             <!-- 1. Year Filter -->
@@ -1392,7 +1808,7 @@ onMounted(() => {
               </div>
             </div>
 
-            <!-- 3. Reset Button (Top) & Excel Button (Bottom) -->
+            <!-- 3. Reset & Excel -->
             <div class="d-flex flex-column justify-content-between gap-1">
               <button
                 type="button"
@@ -1439,10 +1855,9 @@ onMounted(() => {
           </div>
         </div>
 
-        <!-- 5-Column Monthwise Table Card Container -->
+        <!-- Monthwise Table -->
         <div class="table-card-wrapper p-2.5 shadow-sm rounded">
           <div class="position-relative jupiter-table-container">
-            <!-- Loading overlay -->
             <div
               v-if="mwIsLoading"
               class="table-loading-overlay d-flex flex-column align-items-center justify-content-center"
@@ -1564,7 +1979,6 @@ onMounted(() => {
                   </td>
                 </tr>
               </tbody>
-              <!-- Grand Total Footer Row -->
               <tfoot v-if="mwRecords.length > 0">
                 <tr class="table-total-row">
                   <td class="ps-3 text-center text-muted">—</td>
@@ -1665,8 +2079,8 @@ onMounted(() => {
   width: 100%;
 }
 
-.border-bottom-subtle {
-  border-bottom: 1px solid #1e293b;
+.border-top-subtle {
+  border-top: 1px solid #1e293b;
 }
 
 .tabs-divider {
@@ -1674,8 +2088,6 @@ onMounted(() => {
   width: 100%;
 }
 
-/* Compact Sleek Tabs Styling */
-/* Distinct Multi-Color Tabs Styling */
 .reports-tabs-wrapper {
   background: #0d131f;
   border: 1px solid #1e293b;
@@ -1703,7 +2115,7 @@ onMounted(() => {
   transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-/* 1. Local LC Report Tab (Cyan/Sky Blue Theme) */
+/* 1. Beneficiary Report Tab */
 .tab-local-lc .tab-icon-blue {
   color: #38bdf8;
   transition: transform 0.2s ease;
@@ -1727,7 +2139,7 @@ onMounted(() => {
   color: #7dd3fc;
 }
 
-/* 2. Local LC Report Tab (Purple/Indigo Theme) */
+/* 2. Local LC Report Tab */
 .tab-all-data .tab-icon-purple {
   color: #c084fc;
   transition: transform 0.2s ease;
@@ -1751,7 +2163,7 @@ onMounted(() => {
   color: #e9d5ff;
 }
 
-/* 4. Monthwise Summary Tab (Amber/Gold Theme) */
+/* 3. Monthwise Summary Tab */
 .tab-monthwise .tab-icon-amber {
   color: #fbbf24;
   transition: transform 0.2s ease;
@@ -1775,42 +2187,12 @@ onMounted(() => {
   color: #fde68a;
 }
 
-.tab-page-title {
-  color: #cbd5e1;
-  font-size: 0.95rem;
-  font-weight: 500;
-}
-
 .table-card-wrapper {
   background: #131926;
   border: 1px solid #1e293b;
   border-radius: 8px;
 }
 
-/* Tab Content Cards */
-.tab-pane-card {
-  background: #131926;
-  border: 1px solid #1e293b;
-  border-radius: 8px;
-  padding: 0.85rem 1.1rem !important;
-}
-
-.tab-card-title {
-  color: #cbd5e1;
-  font-size: 0.95rem;
-  font-weight: 500;
-}
-
-.badge-total-records {
-  background: rgba(148, 163, 184, 0.08);
-  border: 1px solid #1e293b;
-  border-radius: 5px;
-  padding: 0.25rem 0.65rem;
-  font-size: 0.82rem;
-  color: #94a3b8;
-}
-
-/* Clean Frameless Filter Bar */
 .filter-bar {
   background: transparent;
   border: none;
@@ -1831,6 +2213,10 @@ onMounted(() => {
   line-height: 1;
   margin-right: 0.45rem !important;
   flex-shrink: 0;
+}
+
+.text-purple {
+  color: #c084fc !important;
 }
 
 .filter-column-box {
@@ -1940,7 +2326,6 @@ onMounted(() => {
   color: #ffffff;
 }
 
-/* Export to Excel Button */
 .btn-export-excel {
   background: #166534;
   border: 1px solid #22c55e;
@@ -1972,7 +2357,6 @@ onMounted(() => {
   box-shadow: none;
 }
 
-/* Table Container & 11 Columns */
 .jupiter-table-container {
   background: #111722;
   border: 1px solid #1e293b;
@@ -2047,7 +2431,6 @@ onMounted(() => {
   font-weight: 600;
 }
 
-/* Pagination Controls */
 .pagination-info {
   font-size: 0.85rem;
   color: #94a3b8;
@@ -2084,24 +2467,6 @@ onMounted(() => {
   color: #94a3b8;
 }
 
-.badge-tag {
-  background: rgba(56, 189, 248, 0.1);
-  color: #7dd3fc;
-  border: 1px solid rgba(56, 189, 248, 0.2);
-  border-radius: 4px;
-  font-size: 0.72rem;
-  font-weight: 500;
-  padding: 0.2rem 0.55rem;
-}
-
-.tab-placeholder-body {
-  border: 1px dashed #1e293b;
-  border-radius: 6px;
-  background: rgba(16, 22, 35, 0.5);
-  margin-top: 1rem;
-}
-
-/* Interactive Unique/Regular count toggle icon button in Monthwise header */
 .btn-icon-toggle {
   background: transparent;
   border: none;
@@ -2126,7 +2491,6 @@ onMounted(() => {
   filter: drop-shadow(0 0 5px rgba(56, 189, 248, 0.6));
 }
 
-/* Custom Beneficiary Autocomplete Menu */
 .beneficiary-autocomplete-dropdown {
   position: absolute;
   top: 100%;
@@ -2175,24 +2539,6 @@ onMounted(() => {
   font-weight: 500;
 }
 
-.chip-clear-all-btn {
-  background: transparent;
-  border: none;
-  color: #f87171;
-  font-size: 0.72rem;
-  font-weight: 500;
-  padding: 0.15rem 0.35rem;
-  cursor: pointer;
-  border-radius: 3px;
-  transition: all 0.15s ease;
-  text-decoration: underline;
-}
-
-.chip-clear-all-btn:hover {
-  color: #ef4444;
-  background: rgba(239, 68, 68, 0.1);
-}
-
 .jupiter-report-table tfoot .table-total-row td {
   background: #151d2b !important;
   border-top: 1px solid #334155 !important;
@@ -2200,7 +2546,6 @@ onMounted(() => {
   padding: 0.75rem 0.85rem !important;
 }
 
-/* Monthwise Deletion & Batch Action Styles */
 .batch-action-bar {
   background: rgba(30, 41, 59, 0.75);
   border: 1px solid rgba(245, 158, 11, 0.35);
@@ -2291,7 +2636,6 @@ onMounted(() => {
   color: #ffffff;
 }
 
-/* Custom Modal Backdrop & Card */
 .custom-modal-backdrop {
   position: fixed;
   top: 0;
