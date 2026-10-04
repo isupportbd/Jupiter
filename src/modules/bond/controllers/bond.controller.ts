@@ -183,11 +183,24 @@ export const getLocalLcReport: Handler = async (c: any) => {
     const offset = isExport ? 0 : (page - 1) * limit;
 
     const search = (c.req.query("search") || "").trim();
-    const beneficiary = (c.req.query("beneficiary") || "").trim();
+    const rawBeneficiary = (c.req.query("beneficiary") || c.req.query("beneficiaries") || "").trim();
     const lcDateFrom = parseFilterDate(c.req.query("lcDateFrom") || "");
     const lcDateTo = parseFilterDate(c.req.query("lcDateTo") || "", true);
     const entryDateFrom = parseFilterDate(c.req.query("entryDateFrom") || "");
     const entryDateTo = parseFilterDate(c.req.query("entryDateTo") || "", true);
+
+    let beneficiaryList: string[] = [];
+    if (rawBeneficiary.startsWith("[") && rawBeneficiary.endsWith("]")) {
+      try {
+        beneficiaryList = JSON.parse(rawBeneficiary);
+      } catch (_) {}
+    }
+    if (beneficiaryList.length === 0 && rawBeneficiary) {
+      beneficiaryList = rawBeneficiary
+        .split(/[,;|]/)
+        .map((b: string) => b.trim())
+        .filter(Boolean);
+    }
 
     // Strictly enforce multi-tenant per-user data isolation
     const conditions: any[] = [eq(bondRecords.userId, userId)];
@@ -213,9 +226,12 @@ export const getLocalLcReport: Handler = async (c: any) => {
       );
     }
 
-    // Beneficiary filter
-    if (beneficiary) {
-      conditions.push(ilike(bondRecords.beneficiaryName, `%${beneficiary}%`));
+    // Beneficiary filter (supports single or multiple selected beneficiaries)
+    if (beneficiaryList.length === 1) {
+      conditions.push(ilike(bondRecords.beneficiaryName, `%${beneficiaryList[0]}%`));
+    } else if (beneficiaryList.length > 1) {
+      const benConditions = beneficiaryList.map((name) => ilike(bondRecords.beneficiaryName, `%${name}%`));
+      conditions.push(or(...benConditions));
     }
 
     // LC Date Range

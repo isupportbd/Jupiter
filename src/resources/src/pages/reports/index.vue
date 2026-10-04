@@ -31,24 +31,60 @@ const totalLcValue = ref(0);
 
 // Filters State
 const searchQuery = ref("");
-const beneficiaryFilter = ref("");
+const beneficiarySearchInput = ref("");
+const selectedBeneficiaries = ref<string[]>([]);
 const lcDateFrom = ref("");
 const lcDateTo = ref("");
 const entryDateFrom = ref("");
 const entryDateTo = ref("");
 
-// Beneficiary suggestions
+// Beneficiary suggestions & Multi-select
 const beneficiaryOptions = ref<string[]>([]);
 const localBeneficiarySuggestions = ref<string[]>([]);
 const showBeneficiaryDropdown = ref(false);
+
+const isBeneficiarySelected = (name: string) => {
+  return selectedBeneficiaries.value.includes(name);
+};
+
+const toggleBeneficiary = (name: string) => {
+  const trimmed = (name || "").trim();
+  if (!trimmed) return;
+  const idx = selectedBeneficiaries.value.indexOf(trimmed);
+  if (idx > -1) {
+    selectedBeneficiaries.value.splice(idx, 1);
+  } else {
+    selectedBeneficiaries.value.push(trimmed);
+  }
+  fetchLocalLcData(1);
+};
+
+const removeBeneficiary = (name: string) => {
+  selectedBeneficiaries.value = selectedBeneficiaries.value.filter((b) => b !== name);
+  fetchLocalLcData(1);
+};
+
+const clearAllBeneficiaries = () => {
+  selectedBeneficiaries.value = [];
+  beneficiarySearchInput.value = "";
+  showBeneficiaryDropdown.value = false;
+  fetchLocalLcData(1);
+};
+
+const getBeneficiaryParam = () => {
+  if (selectedBeneficiaries.value.length > 0) {
+    return JSON.stringify(selectedBeneficiaries.value);
+  }
+  return beneficiarySearchInput.value.trim() || undefined;
+};
 
 let localBenSearchTimeout: any = null;
 const searchLocalBeneficiariesFromApi = (query: string) => {
   clearTimeout(localBenSearchTimeout);
   const q = (query || "").trim();
   if (!q) {
-    localBeneficiarySuggestions.value = [];
-    showBeneficiaryDropdown.value = false;
+    localBeneficiarySuggestions.value = beneficiaryOptions.value.slice(0, 50);
+    showBeneficiaryDropdown.value = localBeneficiarySuggestions.value.length > 0;
     return;
   }
   const filtered = beneficiaryOptions.value
@@ -74,31 +110,15 @@ const searchLocalBeneficiariesFromApi = (query: string) => {
   }, 150);
 };
 
-const selectBeneficiary = (name: string) => {
-  beneficiaryFilter.value = name;
-  showBeneficiaryDropdown.value = false;
-  fetchLocalLcData(1);
-};
-
 const handleBeneficiaryFocus = () => {
-  if (beneficiaryFilter.value.trim().length >= 1) {
-    searchLocalBeneficiariesFromApi(beneficiaryFilter.value);
-  } else {
-    showBeneficiaryDropdown.value = false;
-    localBeneficiarySuggestions.value = [];
-  }
+  searchLocalBeneficiariesFromApi(beneficiarySearchInput.value);
 };
 
 const handleBeneficiaryInput = () => {
-  const q = beneficiaryFilter.value.trim();
-  if (!q) {
-    showBeneficiaryDropdown.value = false;
-    localBeneficiarySuggestions.value = [];
-  } else {
-    searchLocalBeneficiariesFromApi(beneficiaryFilter.value);
+  searchLocalBeneficiariesFromApi(beneficiarySearchInput.value);
+  if (selectedBeneficiaries.value.length === 0) {
+    handleSearchInput();
   }
-  // Automatically filter the table with the typed word!
-  handleSearchInput();
 };
 
 const handleBeneficiaryBlur = () => {
@@ -112,7 +132,8 @@ let debounceTimer: any = null;
 const hasActiveFilters = computed(() => {
   return (
     !!searchQuery.value.trim() ||
-    !!beneficiaryFilter.value.trim() ||
+    selectedBeneficiaries.value.length > 0 ||
+    !!beneficiarySearchInput.value.trim() ||
     !!lcDateFrom.value ||
     !!lcDateTo.value ||
     !!entryDateFrom.value ||
@@ -147,8 +168,7 @@ const clearSearch = () => {
 };
 
 const clearBeneficiary = () => {
-  beneficiaryFilter.value = "";
-  fetchLocalLcData(1);
+  clearAllBeneficiaries();
 };
 
 const clearLcDate = () => {
@@ -187,7 +207,7 @@ const fetchLocalLcData = async (page = 1) => {
         page: currentPage.value,
         limit: pageSize.value,
         search: searchQuery.value || undefined,
-        beneficiary: beneficiaryFilter.value || undefined,
+        beneficiary: getBeneficiaryParam(),
         lcDateFrom: lcDateFrom.value || undefined,
         lcDateTo: lcDateTo.value || undefined,
         entryDateFrom: entryDateFrom.value || undefined,
@@ -225,7 +245,8 @@ const handleFilterChange = () => {
 
 const resetFilters = () => {
   searchQuery.value = "";
-  beneficiaryFilter.value = "";
+  beneficiarySearchInput.value = "";
+  selectedBeneficiaries.value = [];
   lcDateFrom.value = "";
   lcDateTo.value = "";
   entryDateFrom.value = "";
@@ -267,7 +288,7 @@ const exportToExcel = async () => {
       params: {
         export: "true",
         search: searchQuery.value || undefined,
-        beneficiary: beneficiaryFilter.value || undefined,
+        beneficiary: getBeneficiaryParam(),
         lcDateFrom: lcDateFrom.value || undefined,
         lcDateTo: lcDateTo.value || undefined,
         entryDateFrom: entryDateFrom.value || undefined,
@@ -923,17 +944,17 @@ onMounted(() => {
             <!-- 3. Beneficiary Name (Top) & Search (Bottom) -->
             <div class="col-12 col-md-6 col-lg">
               <div class="d-flex flex-column justify-content-between h-100 gap-1">
-                <!-- Beneficiary Input with Name & Address Autocomplete -->
+                <!-- Beneficiary Input with Name Autocomplete & Multi-Select -->
                 <div class="position-relative w-100">
                   <div class="input-group input-group-sm">
-                    <span class="input-group-text filter-addon" title="Beneficiary Name">
+                    <span class="input-group-text filter-addon" title="Beneficiary Filter">
                       <i class="bi bi-person-badge"></i>
                     </span>
                     <input
-                      v-model="beneficiaryFilter"
+                      v-model="beneficiarySearchInput"
                       type="text"
                       class="form-control form-control-sm filter-input"
-                      placeholder="Type to search Beneficiary..."
+                      :placeholder="selectedBeneficiaries.length > 0 ? `${selectedBeneficiaries.length} selected — type to add...` : 'Type to search & click to select...'"
                       autocomplete="off"
                       @focus="handleBeneficiaryFocus"
                       @input="handleBeneficiaryInput"
@@ -941,30 +962,74 @@ onMounted(() => {
                       @keydown.esc="showBeneficiaryDropdown = false"
                     />
                     <button
-                      v-if="beneficiaryFilter"
+                      v-if="selectedBeneficiaries.length > 0 || beneficiarySearchInput"
                       type="button"
                       class="btn filter-clear-btn"
-                      title="Clear Beneficiary"
-                      @click="clearBeneficiary"
+                      title="Clear Beneficiaries"
+                      @click="clearAllBeneficiaries"
                     >
                       <i class="bi bi-x"></i>
                     </button>
                   </div>
 
-                  <!-- Autocomplete dropdown list with Pure Unique Name -->
+                  <!-- Autocomplete dropdown list with Multi-Select Click Support -->
                   <div
                     v-if="showBeneficiaryDropdown && localBeneficiarySuggestions.length > 0"
                     class="beneficiary-autocomplete-dropdown shadow-lg"
                   >
+                    <div class="beneficiary-dropdown-header d-flex align-items-center justify-content-between px-2 py-1 border-bottom border-secondary border-opacity-25 small text-muted">
+                      <span><i class="bi bi-hand-index-thumb me-1 text-info"></i>Click to select / unselect</span>
+                      <span v-if="selectedBeneficiaries.length > 0" class="badge bg-info text-dark rounded-pill">
+                        {{ selectedBeneficiaries.length }} selected
+                      </span>
+                    </div>
                     <div
                       v-for="(name, bIdx) in localBeneficiarySuggestions"
                       :key="bIdx"
-                      class="beneficiary-autocomplete-item"
-                      @mousedown.prevent="selectBeneficiary(name)"
+                      class="beneficiary-autocomplete-item d-flex align-items-center justify-content-between"
+                      :class="{ 'is-selected': isBeneficiarySelected(name) }"
+                      @mousedown.prevent="toggleBeneficiary(name)"
                     >
-                      <div class="ben-item-name">{{ name }}</div>
+                      <div class="d-flex align-items-center gap-2 text-truncate me-2">
+                        <i
+                          :class="isBeneficiarySelected(name) ? 'bi bi-check-square-fill text-info' : 'bi bi-square text-muted'"
+                          class="fs-6 flex-shrink-0"
+                        ></i>
+                        <span class="ben-item-name text-truncate">{{ name }}</span>
+                      </div>
+                      <span v-if="isBeneficiarySelected(name)" class="badge bg-info-subtle text-info border border-info border-opacity-25 px-1.5 py-0.5 small flex-shrink-0">
+                        Selected
+                      </span>
                     </div>
                   </div>
+                </div>
+
+                <!-- Selected Beneficiary Badge Chips -->
+                <div v-if="selectedBeneficiaries.length > 0" class="selected-ben-chips-wrapper d-flex flex-wrap align-items-center gap-1">
+                  <span
+                    v-for="ben in selectedBeneficiaries"
+                    :key="ben"
+                    class="selected-ben-chip d-inline-flex align-items-center gap-1"
+                    :title="ben"
+                  >
+                    <span class="chip-text">{{ ben }}</span>
+                    <button
+                      type="button"
+                      class="chip-close-btn"
+                      title="Remove this company"
+                      @click.stop="removeBeneficiary(ben)"
+                    >
+                      <i class="bi bi-x"></i>
+                    </button>
+                  </span>
+                  <button
+                    type="button"
+                    class="chip-clear-all-btn"
+                    title="Clear all selected companies"
+                    @click="clearAllBeneficiaries"
+                  >
+                    Clear all ({{ selectedBeneficiaries.length }})
+                  </button>
                 </div>
 
                 <!-- Search Input -->
@@ -1989,11 +2054,18 @@ onMounted(() => {
   background: #0f1624;
   border: 1px solid #283548;
   border-radius: 6px;
-  max-height: 240px;
+  max-height: 250px;
   overflow-y: auto;
   z-index: 1050;
   margin-top: 2px;
   box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.6);
+}
+
+.beneficiary-dropdown-header {
+  background: rgba(15, 23, 42, 0.95);
+  font-size: 0.72rem;
+  font-weight: 500;
+  letter-spacing: 0.02em;
 }
 
 .beneficiary-autocomplete-item {
@@ -2012,6 +2084,11 @@ onMounted(() => {
   background: #1e293b;
 }
 
+.beneficiary-autocomplete-item.is-selected {
+  background: rgba(56, 189, 248, 0.12);
+  border-left: 2px solid #38bdf8;
+}
+
 .ben-item-name {
   color: #f1f5f9;
   font-size: 0.83rem;
@@ -2022,6 +2099,69 @@ onMounted(() => {
   color: #94a3b8;
   font-size: 0.74rem;
   margin-top: 1px;
+}
+
+.selected-ben-chips-wrapper {
+  max-height: 72px;
+  overflow-y: auto;
+  padding: 2px 0;
+}
+
+.selected-ben-chip {
+  background: rgba(56, 189, 248, 0.12);
+  border: 1px solid rgba(56, 189, 248, 0.3);
+  color: #7dd3fc;
+  border-radius: 4px;
+  font-size: 0.73rem;
+  font-weight: 500;
+  padding: 0.15rem 0.45rem;
+  line-height: 1.2;
+}
+
+.chip-text {
+  max-width: 170px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: inline-block;
+}
+
+.chip-close-btn {
+  background: transparent;
+  border: none;
+  color: #94a3b8;
+  padding: 0;
+  margin-left: 2px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  border-radius: 50%;
+  font-size: 0.85rem;
+  line-height: 1;
+  transition: color 0.15s ease, background 0.15s ease;
+}
+
+.chip-close-btn:hover {
+  color: #f87171;
+}
+
+.chip-clear-all-btn {
+  background: transparent;
+  border: none;
+  color: #f87171;
+  font-size: 0.72rem;
+  font-weight: 500;
+  padding: 0.15rem 0.35rem;
+  cursor: pointer;
+  border-radius: 3px;
+  transition: all 0.15s ease;
+  text-decoration: underline;
+}
+
+.chip-clear-all-btn:hover {
+  color: #ef4444;
+  background: rgba(239, 68, 68, 0.1);
 }
 
 .jupiter-report-table tfoot .table-total-row td {
