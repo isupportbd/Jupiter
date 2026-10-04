@@ -139,19 +139,20 @@ export const processUploadChunk: Handler = async (c: any) => {
 };
 
 /**
- * 2. Get Summary & Counts (Scoped to user's own data)
+ * 2. Get Summary & Counts (Strictly scoped to user's own data)
  * Route: GET /api/bond/summary
  */
 export const getSummary: Handler = async (c: any) => {
   try {
-    const { userId, isSuperOrAdmin } = getAuthContext(c);
+    const { userId } = getAuthContext(c);
     if (!userId) {
       return c.json({ message: "Unauthorized" }, HttpStatusCodes.UNAUTHORIZED);
     }
 
-    const whereCondition = !isSuperOrAdmin ? eq(bondRecords.userId, userId) : undefined;
-    const countQuery = db.select({ count: sql`count(*)` }).from(bondRecords);
-    const countResult = whereCondition ? await countQuery.where(whereCondition) : await countQuery;
+    const countResult = await db
+      .select({ count: sql`count(*)` })
+      .from(bondRecords)
+      .where(eq(bondRecords.userId, userId));
     const totalRecords = Number(countResult[0]?.count || 0);
 
     return c.json({
@@ -166,12 +167,12 @@ export const getSummary: Handler = async (c: any) => {
 };
 
 /**
- * 3. Get Local LC Report (Paginated + Filterable + Exportable + User Scoped)
+ * 3. Get Local LC Report (Paginated + Filterable + Exportable + Strictly User Scoped)
  * Route: GET /api/bond/reports/local-lc
  */
 export const getLocalLcReport: Handler = async (c: any) => {
   try {
-    const { userId, isSuperOrAdmin } = getAuthContext(c);
+    const { userId } = getAuthContext(c);
     if (!userId) {
       return c.json({ message: "Unauthorized" }, HttpStatusCodes.UNAUTHORIZED);
     }
@@ -188,12 +189,8 @@ export const getLocalLcReport: Handler = async (c: any) => {
     const entryDateFrom = parseFilterDate(c.req.query("entryDateFrom") || "");
     const entryDateTo = parseFilterDate(c.req.query("entryDateTo") || "", true);
 
-    const conditions: any[] = [];
-
-    // Enforce strict multi-tenant / user data isolation for non-superadmins
-    if (!isSuperOrAdmin) {
-      conditions.push(eq(bondRecords.userId, userId));
-    }
+    // Strictly enforce multi-tenant per-user data isolation
+    const conditions: any[] = [eq(bondRecords.userId, userId)];
 
     // Global text search
     if (search) {
@@ -319,24 +316,21 @@ export const getLocalLcReport: Handler = async (c: any) => {
 };
 
 /**
- * 4. Get Distinct Beneficiaries List for Dropdown filter (Scoped to user)
+ * 4. Get Distinct Beneficiaries List for Dropdown filter (Strictly Scoped to user's own uploaded records)
  * Route: GET /api/bond/beneficiaries
  */
 export const getBeneficiaries: Handler = async (c: any) => {
   try {
-    const { userId, isSuperOrAdmin } = getAuthContext(c);
+    const { userId } = getAuthContext(c);
     if (!userId) {
       return c.json({ message: "Unauthorized" }, HttpStatusCodes.UNAUTHORIZED);
     }
 
     const search = c.req.query("search")?.trim();
     const whereConditions: any[] = [
+      eq(bondRecords.userId, userId),
       sql`beneficiary_name is not null and trim(beneficiary_name) != ''`
     ];
-
-    if (!isSuperOrAdmin) {
-      whereConditions.push(eq(bondRecords.userId, userId));
-    }
 
     if (search) {
       whereConditions.push(
@@ -365,12 +359,12 @@ export const getBeneficiaries: Handler = async (c: any) => {
 };
 
 /**
- * 5. Get Monthwise Summary (Month, Total Records, Total LC, Total Beneficiary, Total Bank - User Scoped)
+ * 5. Get Monthwise Summary (Strictly User Scoped)
  * Route: GET /api/bond/reports/monthwise
  */
 export const getMonthwiseSummary: Handler = async (c: any) => {
   try {
-    const { userId, isSuperOrAdmin } = getAuthContext(c);
+    const { userId } = getAuthContext(c);
     if (!userId) {
       return c.json({ message: "Unauthorized" }, HttpStatusCodes.UNAUTHORIZED);
     }
@@ -380,12 +374,9 @@ export const getMonthwiseSummary: Handler = async (c: any) => {
     const monthTo = (c.req.query("monthTo") || "").trim();
 
     const conditions: any[] = [
+      eq(bondRecords.userId, userId),
       sql`COALESCE(entry_date, lc_date) IS NOT NULL`
     ];
-
-    if (!isSuperOrAdmin) {
-      conditions.push(eq(bondRecords.userId, userId));
-    }
 
     if (year) {
       conditions.push(sql`TO_CHAR(COALESCE(entry_date, lc_date), 'YYYY') = ${year}`);
@@ -460,12 +451,12 @@ export const getMonthwiseSummary: Handler = async (c: any) => {
 };
 
 /**
- * 6. Delete Monthwise Records (Single Month or Batch Deletion - Strictly scoped to own user records)
+ * 6. Delete Monthwise Records (Strictly scoped to user's own records)
  * Route: POST /api/bond/reports/monthwise/delete
  */
 export const deleteMonthwiseRecords: Handler = async (c: any) => {
   try {
-    const { userId, isSuperOrAdmin } = getAuthContext(c);
+    const { userId } = getAuthContext(c);
     if (!userId) {
       return c.json({ message: "Unauthorized" }, HttpStatusCodes.UNAUTHORIZED);
     }
@@ -481,9 +472,7 @@ export const deleteMonthwiseRecords: Handler = async (c: any) => {
       (m) => sql`TO_CHAR(COALESCE(${bondRecords.entryDate}, ${bondRecords.lcDate}), 'YYYY-MM') = ${m}`
     );
 
-    const deleteCondition = !isSuperOrAdmin
-      ? and(eq(bondRecords.userId, userId), or(...monthConditions))
-      : or(...monthConditions);
+    const deleteCondition = and(eq(bondRecords.userId, userId), or(...monthConditions));
 
     await db.delete(bondRecords).where(deleteCondition);
 

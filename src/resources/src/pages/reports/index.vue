@@ -51,10 +51,11 @@ const searchLocalBeneficiariesFromApi = (query: string) => {
     showBeneficiaryDropdown.value = false;
     return;
   }
-  showBeneficiaryDropdown.value = true;
-  localBeneficiarySuggestions.value = beneficiaryOptions.value
+  const filtered = beneficiaryOptions.value
     .filter((b) => b.name && b.name.toLowerCase().includes(q.toLowerCase()))
     .slice(0, 50);
+  localBeneficiarySuggestions.value = filtered;
+  showBeneficiaryDropdown.value = filtered.length > 0;
 
   localBenSearchTimeout = setTimeout(async () => {
     try {
@@ -63,6 +64,7 @@ const searchLocalBeneficiariesFromApi = (query: string) => {
       });
       if (res.data && res.data.success && Array.isArray(res.data.data)) {
         localBeneficiarySuggestions.value = res.data.data;
+        showBeneficiaryDropdown.value = res.data.data.length > 0;
       }
     } catch (_) {}
   }, 150);
