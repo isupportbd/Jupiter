@@ -576,9 +576,11 @@ const exportToExcel = async () => {
       views: [{ showGridLines: true }]
     });
 
-    // 3. Define Columns
+    // 3. Define Columns (Beneficiary Name & Address first)
     sheet.columns = [
       { header: "#", key: "sl", width: 6 },
+      { header: "BENEFICIARY_NAME", key: "beneficiaryName", width: 28 },
+      { header: "BENEFICIARY_ADDRESS", key: "beneficiaryAddress", width: 34 },
       { header: "BANK_NAME", key: "bankName", width: 28 },
       { header: "BRANCH_NAME", key: "branchName", width: 24 },
       { header: "LC ID", key: "lcId", width: 20 },
@@ -587,8 +589,6 @@ const exportToExcel = async () => {
       { header: "LC_EXPIRY_DATE", key: "lcExpiryDate", width: 16 },
       { header: "EXPORTER_INFO", key: "exporterInfo", width: 30 },
       { header: "BENEFICIARY_BANK", key: "beneficiaryBank", width: 28 },
-      { header: "BENEFICIARY_NAME", key: "beneficiaryName", width: 28 },
-      { header: "BENEFICIARY_ADDRESS", key: "beneficiaryAddress", width: 34 },
       { header: "ENTRY_DATE", key: "entryDate", width: 14 }
     ];
 
@@ -1265,6 +1265,8 @@ onMounted(() => {
               <thead>
                 <tr>
                   <th class="ps-3 text-center" style="width: 45px;">#</th>
+                  <th>BENEFICIARY_NAME</th>
+                  <th>BENEFICIARY_ADDRESS</th>
                   <th>BANK_NAME</th>
                   <th>BRANCH_NAME</th>
                   <th>LC ID</th>
@@ -1273,8 +1275,6 @@ onMounted(() => {
                   <th>LC_EXPIRY_DATE</th>
                   <th>EXPORTER_INFO</th>
                   <th>BENEFICIARY_BANK</th>
-                  <th>BENEFICIARY_NAME</th>
-                  <th>BENEFICIARY_ADDRESS</th>
                   <th class="pe-3">ENTRY_DATE</th>
                 </tr>
               </thead>
@@ -1292,6 +1292,12 @@ onMounted(() => {
                   <td class="ps-3 text-center cell-num">
                     {{ (currentPage - 1) * pageSize + idx + 1 }}
                   </td>
+                  <td style="max-width: 180px;" class="text-truncate cell-main fw-medium" :title="row.beneficiaryName || ''">
+                    {{ row.beneficiaryName || '-' }}
+                  </td>
+                  <td style="max-width: 200px;" class="text-truncate cell-muted" :title="row.beneficiaryAddress || ''">
+                    {{ row.beneficiaryAddress || '-' }}
+                  </td>
                   <td class="cell-main">{{ row.bankName || '-' }}</td>
                   <td class="cell-muted">{{ row.branchName || '-' }}</td>
                   <td class="cell-lc-id font-monospace">{{ row.lcId || '-' }}</td>
@@ -1302,12 +1308,6 @@ onMounted(() => {
                     {{ row.exporterInfo || '-' }}
                   </td>
                   <td class="cell-muted">{{ row.beneficiaryBank || '-' }}</td>
-                  <td style="max-width: 180px;" class="text-truncate cell-main" :title="row.beneficiaryName || ''">
-                    {{ row.beneficiaryName || '-' }}
-                  </td>
-                  <td style="max-width: 200px;" class="text-truncate cell-muted" :title="row.beneficiaryAddress || ''">
-                    {{ row.beneficiaryAddress || '-' }}
-                  </td>
                   <td class="pe-3 cell-muted font-monospace">{{ formatDate(row.entryDate) }}</td>
                 </tr>
               </tbody>
