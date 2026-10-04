@@ -382,7 +382,7 @@ const exportBenToExcel = async () => {
     const link = document.createElement("a");
     const todayStr = new Date().toISOString().slice(0, 10);
     link.href = url;
-    link.download = `Beneficiary_Report_${todayStr}.xlsx`;
+    link.download = `Beneficiary_Report_2_${todayStr}.xlsx`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -572,7 +572,7 @@ const exportToExcel = async () => {
     workbook.creator = "Jupiter";
     workbook.created = new Date();
 
-    const sheet = workbook.addWorksheet("Local LC Report", {
+    const sheet = workbook.addWorksheet("Beneficiary Report", {
       views: [{ showGridLines: true }]
     });
 
@@ -710,7 +710,7 @@ const exportToExcel = async () => {
     const link = document.createElement("a");
     const todayStr = new Date().toISOString().slice(0, 10);
     link.href = url;
-    link.download = `Local_LC_Report_${todayStr}.xlsx`;
+    link.download = `Beneficiary_Report_${todayStr}.xlsx`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -1012,7 +1012,7 @@ onMounted(() => {
     <div class="d-flex align-items-center justify-content-center mb-2">
       <div class="reports-tabs-wrapper">
         <ul class="nav nav-tabs reports-tabs border-0" role="tablist">
-          <!-- Tab 1: Local LC Report (Blue/Cyan Theme) -->
+          <!-- Tab 1: Beneficiary Report (Blue/Cyan Theme) -->
           <li class="nav-item" role="presentation">
             <button
               type="button"
@@ -1021,11 +1021,11 @@ onMounted(() => {
               @click="setActiveTab('local_lc')"
             >
               <i class="bi bi-file-earmark-text me-2 tab-icon-blue"></i>
-              <span>Local LC Report</span>
+              <span>Beneficiary Report</span>
             </button>
           </li>
 
-          <!-- Tab 2: Beneficiary Report (Green/Emerald Theme) -->
+          <!-- Tab 2: Beneficiary Report-2 (Green/Emerald Theme) -->
           <li class="nav-item" role="presentation">
             <button
               type="button"
@@ -1034,7 +1034,7 @@ onMounted(() => {
               @click="setActiveTab('beneficiary')"
             >
               <i class="bi bi-person-lines-fill me-2 tab-icon-green"></i>
-              <span>Beneficiary Report</span>
+              <span>Beneficiary Report-2</span>
             </button>
           </li>
 
