@@ -116,46 +116,45 @@ const handleLogout = async () => {
 
           <div
             v-if="isDropdownOpen"
-            class="dropdown-menu show dropdown-menu-end position-absolute mt-2 shadow-lg"
-            style="min-width: 230px; z-index: 1060; right: 0 !important; left: auto !important;"
+            class="dropdown-menu show dropdown-menu-end position-absolute mt-2 shadow-lg user-dropdown-card"
+            style="min-width: 240px; z-index: 1060; right: 0 !important; left: auto !important;"
           >
-            <div class="px-3 py-2 border-bottom border-secondary mb-1">
-              <div class="fw-bold text-white text-capitalize">
+            <!-- User Info Header -->
+            <div class="user-card-header px-3 py-2.5">
+              <div class="user-card-name fw-bold text-white text-capitalize">
                 {{ authStore.user?.name || 'User' }}
               </div>
-              <div class="text-muted small text-truncate mb-2">
-                {{ authStore.user?.email || '' }}
+              <div v-if="authStore.user?.email" class="user-card-email text-muted small text-truncate">
+                {{ authStore.user.email }}
               </div>
-              <div class="d-flex align-items-center gap-2 flex-wrap">
-                <span class="user-role-badge">
-                  {{ (authStore.user as any)?.role?.name || (authStore.user as any)?.role || 'User' }}
-                </span>
-                <span
-                  v-if="!isAdmin"
-                  :class="['user-days-badge', { 'is-expired': daysRemaining <= 0 }]"
-                >
-                  <i :class="daysRemaining > 0 ? 'bi bi-clock-history me-1' : 'bi bi-exclamation-octagon-fill me-1'"></i>
-                  {{ daysRemaining > 1 ? `${daysRemaining} Days Left` : daysRemaining === 1 ? '1 Day Left' : 'Expired' }}
+              <div class="d-flex align-items-center gap-2 mt-2">
+                <span :class="['user-role-badge', isAdmin ? 'role-admin' : 'role-user']">
+                  {{ (authStore.user as any)?.role?.name || (authStore.user as any)?.role || (isAdmin ? 'ADMIN' : 'USER') }}
                 </span>
               </div>
             </div>
+
+            <div class="user-card-divider"></div>
 
             <!-- Admin users link -->
             <router-link
               v-if="isAdmin"
               to="/users"
-              class="dropdown-item text-light d-flex align-items-center gap-2"
+              class="dropdown-item user-card-item d-flex align-items-center gap-2 px-3 py-2"
               @click="isDropdownOpen = false"
             >
-              <i class="bi bi-people-fill text-primary"></i> User &amp; Billing
+              <i class="bi bi-people-fill text-primary"></i>
+              <span>User &amp; Billing</span>
             </router-link>
 
+            <!-- Sign Out -->
             <button
               type="button"
-              class="dropdown-item text-danger d-flex align-items-center gap-2 mt-1"
+              class="dropdown-item user-card-item text-danger d-flex align-items-center gap-2 px-3 py-2"
               @click="handleLogout"
             >
-              <i class="bi bi-box-arrow-right"></i> Sign Out
+              <i class="bi bi-box-arrow-right"></i>
+              <span>Sign Out</span>
             </button>
           </div>
         </div>
@@ -237,52 +236,76 @@ const handleLogout = async () => {
   font-size: 0.85rem;
 }
 
+.user-dropdown-card {
+  background: #0f172a !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  border-radius: 12px !important;
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.6), 0 0 1px 1px rgba(255, 255, 255, 0.05) !important;
+  padding: 6px !important;
+  overflow: hidden;
+}
+
+.user-card-header {
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.user-card-name {
+  font-size: 0.92rem;
+  color: #f8fafc;
+  line-height: 1.3;
+}
+
+.user-card-email {
+  font-size: 0.78rem;
+  color: #94a3b8 !important;
+  margin-top: 2px;
+}
+
+.user-card-divider {
+  height: 1px;
+  background: rgba(255, 255, 255, 0.08);
+  margin: 6px 0;
+}
+
 .user-role-badge {
   display: inline-flex;
   align-items: center;
   padding: 3px 8px;
-  background: rgba(37, 99, 235, 0.2);
-  border: 1px solid rgba(56, 189, 248, 0.4);
   border-radius: 6px;
-  color: #38bdf8;
-  font-size: 0.72rem;
-  font-weight: 600;
+  font-size: 0.7rem;
+  font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.5px;
 }
 
-.user-days-badge {
-  display: inline-flex;
-  align-items: center;
-  padding: 3px 8px;
-  background: rgba(34, 197, 94, 0.15);
-  border: 1px solid rgba(34, 197, 94, 0.4);
-  border-radius: 6px;
-  color: #4ade80;
-  font-size: 0.72rem;
-  font-weight: 600;
-  letter-spacing: 0.3px;
+.user-role-badge.role-user {
+  background: rgba(56, 189, 248, 0.12);
+  border: 1px solid rgba(56, 189, 248, 0.35);
+  color: #38bdf8;
 }
 
-.user-days-badge.is-expired {
-  background: rgba(239, 68, 68, 0.15);
-  border-color: rgba(239, 68, 68, 0.4);
-  color: #f87171;
+.user-role-badge.role-admin {
+  background: rgba(245, 158, 11, 0.12);
+  border: 1px solid rgba(245, 158, 11, 0.35);
+  color: #fbbf24;
 }
 
-.dropdown-menu {
-  background: #131926 !important;
-  border: 1px solid #1e293b !important;
-}
-
-.dropdown-item {
+.user-card-item {
   color: #cbd5e1 !important;
-  padding: 0.5rem 1rem;
-  font-size: 0.85rem;
+  border-radius: 6px;
+  font-size: 0.84rem;
+  font-weight: 500;
+  transition: all 0.15s ease-in-out;
 }
 
-.dropdown-item:hover {
-  background: #1e293b !important;
+.user-card-item:hover {
+  background: rgba(255, 255, 255, 0.07) !important;
   color: #ffffff !important;
+}
+
+.user-card-item.text-danger:hover {
+  background: rgba(239, 68, 68, 0.15) !important;
+  color: #f87171 !important;
 }
 </style>

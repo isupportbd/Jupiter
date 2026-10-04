@@ -69,12 +69,16 @@ export async function syncDatabaseSchemaAndSuperAdmin() {
       ALTER TABLE users ADD COLUMN IF NOT EXISTS approved_at TIMESTAMP WITH TIME ZONE;
       ALTER TABLE users ADD COLUMN IF NOT EXISTS approved_by INTEGER;
       ALTER TABLE users ADD COLUMN IF NOT EXISTS email_verified_at TIMESTAMP WITH TIME ZONE;
+
+      CREATE INDEX IF NOT EXISTS idx_users_role_id ON users(role_id);
+      CREATE INDEX IF NOT EXISTS idx_users_status ON users(status);
+      CREATE INDEX IF NOT EXISTS idx_users_subscription ON users(subscription_expires_at);
     `);
   } catch (uErr) {
     console.warn("[DB Users Columns Warning]", uErr);
   }
 
-  // 3. Ensure Auth Support Tables
+  // 3. Ensure Auth Support Tables & Indexes
   try {
     await executeSingleSql(`
       CREATE TABLE IF NOT EXISTS refresh_tokens (
@@ -85,6 +89,8 @@ export async function syncDatabaseSchemaAndSuperAdmin() {
         expires_at TIMESTAMP WITH TIME ZONE NOT NULL,
         created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
       );
+      CREATE INDEX IF NOT EXISTS idx_refresh_tokens_user_id ON refresh_tokens(user_id);
+      CREATE INDEX IF NOT EXISTS idx_refresh_tokens_jti ON refresh_tokens(jti);
 
       CREATE TABLE IF NOT EXISTS email_verification_tokens (
         id SERIAL PRIMARY KEY,
@@ -93,6 +99,7 @@ export async function syncDatabaseSchemaAndSuperAdmin() {
         expires_at TIMESTAMP WITH TIME ZONE NOT NULL,
         created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
       );
+      CREATE INDEX IF NOT EXISTS idx_email_verification_email ON email_verification_tokens(email);
 
       CREATE TABLE IF NOT EXISTS password_reset_tokens (
         id SERIAL PRIMARY KEY,
@@ -101,6 +108,7 @@ export async function syncDatabaseSchemaAndSuperAdmin() {
         expires_at TIMESTAMP WITH TIME ZONE NOT NULL,
         created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
       );
+      CREATE INDEX IF NOT EXISTS idx_password_reset_email ON password_reset_tokens(email);
 
       CREATE TABLE IF NOT EXISTS otp_verifications (
         id SERIAL PRIMARY KEY,
@@ -112,12 +120,13 @@ export async function syncDatabaseSchemaAndSuperAdmin() {
         expires_at TIMESTAMP WITH TIME ZONE NOT NULL,
         created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
       );
+      CREATE INDEX IF NOT EXISTS idx_otp_verifications_email_type ON otp_verifications(email, type);
     `);
   } catch (authErr) {
     console.warn("[DB Auth Tables Warning]", authErr);
   }
 
-  // 4. Ensure Bond Records table & index
+  // 4. Ensure Bond Records table & comprehensive performance indexes
   try {
     await executeSingleSql(`
       CREATE TABLE IF NOT EXISTS bond_records (
@@ -159,7 +168,15 @@ export async function syncDatabaseSchemaAndSuperAdmin() {
       );
 
       ALTER TABLE bond_records ADD COLUMN IF NOT EXISTS user_id INTEGER REFERENCES users(id) ON UPDATE CASCADE ON DELETE CASCADE;
+      
       CREATE INDEX IF NOT EXISTS idx_bond_records_user_id ON bond_records(user_id);
+      CREATE INDEX IF NOT EXISTS idx_bond_records_user_lc_id ON bond_records(user_id, lc_id);
+      CREATE INDEX IF NOT EXISTS idx_bond_records_user_bank ON bond_records(user_id, bank_name);
+      CREATE INDEX IF NOT EXISTS idx_bond_records_user_entry_date ON bond_records(user_id, entry_date);
+      CREATE INDEX IF NOT EXISTS idx_bond_records_user_lc_date ON bond_records(user_id, lc_date);
+      CREATE INDEX IF NOT EXISTS idx_bond_records_applicant ON bond_records(applicant_name);
+      CREATE INDEX IF NOT EXISTS idx_bond_records_beneficiary ON bond_records(beneficiary_name);
+      CREATE INDEX IF NOT EXISTS idx_bond_records_bond_license ON bond_records(bond_license);
     `);
   } catch (bErr) {
     console.warn("[DB Bond Records Columns Warning]", bErr);
