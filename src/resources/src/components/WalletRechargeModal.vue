@@ -110,7 +110,7 @@ const close = () => {
     @click.self="close"
   >
     <div class="modal-dialog modal-dialog-centered" style="max-width: 480px;">
-      <div class="modal-content idp-card border-secondary shadow-lg">
+      <div class="modal-content jupiter-card border-secondary shadow-lg">
         <div class="modal-header border-secondary py-3 px-4">
           <h5 class="modal-title text-white fw-bold d-flex align-items-center gap-2">
             <i class="bi bi-wallet2 text-primary"></i> Wallet Recharge
@@ -176,7 +176,7 @@ const close = () => {
                 <input
                   v-model.number="rechargeAmount"
                   type="number"
-                  class="form-control idp-input font-monospace text-white"
+                  class="form-control jupiter-input font-monospace text-white"
                   placeholder="e.g. 500"
                   required
                   min="10"
@@ -192,7 +192,7 @@ const close = () => {
                 <input
                   v-model="trxId"
                   type="text"
-                  class="form-control idp-input font-monospace text-uppercase"
+                  class="form-control jupiter-input font-monospace text-uppercase"
                   placeholder="e.g. 8N3A5B2C"
                   required
                 />
@@ -217,7 +217,7 @@ const close = () => {
 
             <button
               type="submit"
-              class="btn btn-idp-primary w-100 py-2 fw-bold d-flex align-items-center justify-content-center gap-2"
+              class="btn btn-jupiter-primary w-100 py-2 fw-bold d-flex align-items-center justify-content-center gap-2"
               :disabled="isSubmitting"
             >
               <i v-if="isSubmitting" class="spinner-border spinner-border-sm"></i>

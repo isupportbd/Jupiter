@@ -45,7 +45,7 @@ const envSchema = z
     MAIL_USERNAME: z.string().default(""),
     MAIL_PASSWORD: z.string().default(""),
     MAIL_FROM_ADDRESS: z.string().default("no-reply@example.com"),
-    MAIL_FROM_NAME: z.string().default("IDP"),
+    MAIL_FROM_NAME: z.string().default("Jupiter"),
     SUPERADMIN_EMAIL: z
       .string()
       .optional()

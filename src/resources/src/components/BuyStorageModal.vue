@@ -147,7 +147,7 @@ const triggerRecharge = () => {
     style="background: rgba(0, 0, 0, 0.8); z-index: 1060;"
   >
     <div class="modal-dialog modal-dialog-centered" style="max-width: 520px;">
-      <div class="modal-content idp-modal-card shadow-lg border-primary">
+      <div class="modal-content jupiter-modal-card shadow-lg border-primary">
         <!-- Header -->
         <div class="modal-header border-secondary border-opacity-25 pb-3">
           <div class="d-flex align-items-center gap-2">
@@ -295,7 +295,7 @@ const triggerRecharge = () => {
                 <input
                   v-model="trxId"
                   type="text"
-                  class="form-control form-control-sm font-monospace idp-input"
+                  class="form-control form-control-sm font-monospace jupiter-input"
                   placeholder="e.g. BL92XK891Q"
                 />
               </div>
@@ -339,7 +339,7 @@ const triggerRecharge = () => {
   display: inline-block;
   vertical-align: baseline;
 }
-.idp-modal-card {
+.jupiter-modal-card {
   background: #14181e;
   border-radius: 8px;
 }
@@ -380,13 +380,13 @@ const triggerRecharge = () => {
   border: 1px solid rgba(255, 255, 255, 0.08);
 }
 
-.idp-input {
+.jupiter-input {
   background-color: #14181e !important;
   border: 1px solid rgba(255, 255, 255, 0.12) !important;
   color: #f8fafc !important;
 }
 
-.idp-input:focus {
+.jupiter-input:focus {
   border-color: #3b82f6 !important;
   box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2) !important;
 }

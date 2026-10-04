@@ -8,10 +8,23 @@ axios.defaults.withCredentials = true;
 axios.defaults.headers.common["X-Requested-With"] = "XMLHttpRequest";
 axios.defaults.headers.common.Accept = "application/json";
 
+// One-time migration: move legacy "idp_*" session keys to "jupiter_*" so logged-in users stay logged in
+try {
+  for (const key of ["access_token", "refresh_token", "auth_user"]) {
+    const legacy = localStorage.getItem(`idp_${key}`);
+    if (legacy !== null) {
+      if (localStorage.getItem(`jupiter_${key}`) === null) {
+        localStorage.setItem(`jupiter_${key}`, legacy);
+      }
+      localStorage.removeItem(`idp_${key}`);
+    }
+  }
+} catch {}
+
 // Attach Bearer token from localStorage to every outgoing API request
 axios.interceptors.request.use((config) => {
   try {
-    const token = localStorage.getItem("idp_access_token");
+    const token = localStorage.getItem("jupiter_access_token");
     if (token && !config.headers.Authorization) {
       config.headers.Authorization = `Bearer ${token}`;
     }
@@ -53,9 +66,9 @@ axios.interceptors.response.use(
 
     if (shouldRedirect) {
       try {
-        localStorage.removeItem("idp_access_token");
-        localStorage.removeItem("idp_refresh_token");
-        localStorage.removeItem("idp_auth_user");
+        localStorage.removeItem("jupiter_access_token");
+        localStorage.removeItem("jupiter_refresh_token");
+        localStorage.removeItem("jupiter_auth_user");
       } catch {}
       const redirect = encodeURIComponent(window.location.pathname + window.location.search + window.location.hash);
       window.location.href = `/login?redirect=${redirect}`;

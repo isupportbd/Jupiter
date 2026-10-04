@@ -259,7 +259,7 @@ onUnmounted(() => {
     </div>
 
     <!-- Dynamic Smart Year-Tabbed Month Matrix Popover -->
-    <div v-if="isOpen" class="month-matrix-popover idp-card shadow-lg p-3">
+    <div v-if="isOpen" class="month-matrix-popover jupiter-card shadow-lg p-3">
       <!-- Year Selector with Stepper and Chips -->
       <div class="year-controls mb-3 pb-2 border-bottom border-secondary border-opacity-25">
         <div class="d-flex align-items-center justify-content-between mb-2">

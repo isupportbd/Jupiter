@@ -6,20 +6,20 @@ const showContactModal = ref(false);
 </script>
 
 <template>
-  <div class="idp-layout-wrapper">
+  <div class="jupiter-layout-wrapper">
     <!-- Top Navigation Header -->
     <Header />
 
     <!-- Main Content Body -->
     <main class="flex-grow-1 w-100 d-flex flex-column">
-      <div class="idp-grid-container flex-grow-1 px-3 py-2 py-md-3">
+      <div class="jupiter-grid-container flex-grow-1 px-3 py-2 py-md-3">
         <router-view />
       </div>
     </main>
 
     <!-- Bottom Footer -->
-    <footer class="idp-footer">
-      <div class="idp-grid-container h-100 d-flex align-items-center justify-content-between px-3">
+    <footer class="jupiter-footer">
+      <div class="jupiter-grid-container h-100 d-flex align-items-center justify-content-between px-3">
         <span class="text-muted small fst-italic">
           &copy; Jupiter {{ new Date().getFullYear() }} <span class="heart-icon">💖</span> created by <a href="https://isupportbd.com" target="_blank" class="text-primary text-decoration-none fw-normal">iSupportBD</a>
         </span>
@@ -39,7 +39,7 @@ const showContactModal = ref(false);
       style="background: rgba(0, 0, 0, 0.75);"
     >
       <div class="modal-dialog modal-dialog-centered" style="max-width: 440px;">
-        <div class="modal-content idp-card shadow-lg border-primary">
+        <div class="modal-content jupiter-card shadow-lg border-primary">
           <div class="modal-header border-secondary">
             <h5 class="modal-title text-white fw-bold d-flex align-items-center gap-2">
               <i class="bi bi-headset text-primary"></i> Contact & Support
@@ -120,7 +120,7 @@ const showContactModal = ref(false);
 </template>
 
 <style scoped>
-.idp-layout-wrapper {
+.jupiter-layout-wrapper {
   min-height: 100vh;
   display: flex;
   flex-direction: column;
@@ -128,14 +128,14 @@ const showContactModal = ref(false);
   color: #f8fafc;
 }
 
-.idp-grid-container {
+.jupiter-grid-container {
   width: 100%;
   max-width: 1580px;
   margin-left: auto;
   margin-right: auto;
 }
 
-.idp-footer {
+.jupiter-footer {
   height: 52px;
   background: rgba(15, 23, 42, 0.9);
   border-top: 1px solid rgba(255, 255, 255, 0.08);

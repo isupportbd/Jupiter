@@ -12,8 +12,8 @@
 
     <div class="app-brand">
       <router-link to="/" aria-label="logo" class="d-flex align-items-center gap-2 text-decoration-none">
-        <img src="@/assets/images/logo.png" alt="IDP" style="max-height: 32px;" />
-        <span class="fw-bold text-white fs-5">IDP ERP</span>
+        <img src="@/assets/images/logo.png" alt="Jupiter" style="max-height: 32px;" />
+        <span class="fw-bold text-white fs-5">Jupiter</span>
       </router-link>
     </div>
 

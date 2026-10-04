@@ -247,12 +247,12 @@ onMounted(fetchStatusAndPlans);
 <template>
   <div class="min-vh-100 d-flex flex-column text-white" style="background-color: #0b0f19;">
     <!-- Top Header -->
-    <header class="idp-navbar">
-      <div class="idp-grid-container h-100 d-flex justify-content-between align-items-center px-0">
+    <header class="jupiter-navbar">
+      <div class="jupiter-grid-container h-100 d-flex justify-content-between align-items-center px-0">
         <div class="d-flex align-items-center">
-          <router-link to="/" class="idp-brand" style="font-size: 1.18rem;">
+          <router-link to="/" class="jupiter-brand" style="font-size: 1.18rem;">
             <i class="bi bi-layers-half text-primary fs-4"></i>
-            <span>IDP</span>
+            <span>Jupiter</span>
           </router-link>
         </div>
         <nav class="d-flex align-items-center">
@@ -268,14 +268,14 @@ onMounted(fetchStatusAndPlans);
     </header>
 
     <main class="flex-grow-1 w-100 d-flex flex-column">
-      <div class="idp-grid-container flex-grow-1 text-center px-3 px-md-5 pt-5 pb-5">
+      <div class="jupiter-grid-container flex-grow-1 text-center px-3 px-md-5 pt-5 pb-5">
         <!-- Main Title -->
         <h1 class="display-4 fw-extrabold text-white mb-5">
           Importer Data Processor
         </h1>
 
       <!-- Super Admin First Setup (if no super admin exists) -->
-      <div v-if="!hasSuperAdmin" class="idp-card max-w-2xl mx-auto p-4 p-md-5 shadow-lg text-start mb-5" style="max-width: 520px;">
+      <div v-if="!hasSuperAdmin" class="jupiter-card max-w-2xl mx-auto p-4 p-md-5 shadow-lg text-start mb-5" style="max-width: 520px;">
         <h3 class="text-white fw-bold mb-2 text-center">Super Admin Setup</h3>
         <div class="alert alert-success py-2 small mb-4 text-center">
           Welcome! Create the first account to take full control of the system. No payment required.
@@ -288,17 +288,17 @@ onMounted(fetchStatusAndPlans);
           <div class="row g-3 mb-3">
             <div class="col-md-6">
               <label class="form-label">Full Name</label>
-              <input v-model="name" type="text" class="form-control idp-input" required placeholder="John Doe" />
+              <input v-model="name" type="text" class="form-control jupiter-input" required placeholder="John Doe" />
             </div>
             <div class="col-md-6">
               <label class="form-label">Mobile Number</label>
-              <input v-model="mobile" type="text" class="form-control idp-input" required placeholder="01XXXXXXXXX" />
+              <input v-model="mobile" type="text" class="form-control jupiter-input" required placeholder="01XXXXXXXXX" />
             </div>
           </div>
 
           <div class="mb-3">
             <label class="form-label">Email Address</label>
-            <input v-model="email" type="email" class="form-control idp-input" required placeholder="john@example.com" />
+            <input v-model="email" type="email" class="form-control jupiter-input" required placeholder="john@example.com" />
           </div>
 
           <div class="row g-3 mb-4">
@@ -308,7 +308,7 @@ onMounted(fetchStatusAndPlans);
                 <input
                   v-model="password"
                   :type="showPassword ? 'text' : 'password'"
-                  class="form-control idp-input"
+                  class="form-control jupiter-input"
                   style="padding-right: 42px !important;"
                   required
                   placeholder="••••••••"
@@ -329,7 +329,7 @@ onMounted(fetchStatusAndPlans);
                 <input
                   v-model="confirmPassword"
                   :type="showConfirmPassword ? 'text' : 'password'"
-                  class="form-control idp-input"
+                  class="form-control jupiter-input"
                   style="padding-right: 42px !important;"
                   required
                   placeholder="••••••••"
@@ -348,7 +348,7 @@ onMounted(fetchStatusAndPlans);
 
           <button
             type="submit"
-            class="btn btn-idp-primary w-100 py-3 fw-bold"
+            class="btn btn-jupiter-primary w-100 py-3 fw-bold"
             :disabled="isSubmitting"
           >
             {{ isSubmitting ? 'Creating Account...' : 'Initialize Super Admin' }}
@@ -393,7 +393,7 @@ onMounted(fetchStatusAndPlans);
             :key="plan.id"
             class="col-12 col-md-6 col-lg-4"
           >
-            <div class="idp-card p-4 p-md-5 h-100 d-flex flex-column text-start">
+            <div class="jupiter-card p-4 p-md-5 h-100 d-flex flex-column text-start">
               <h3 class="text-white fw-bold mb-3">{{ plan.name }}</h3>
               <div class="mb-2">
                 <span class="display-5 fw-extrabold text-white">
@@ -465,7 +465,7 @@ onMounted(fetchStatusAndPlans);
               </ul>
 
               <button
-                class="btn btn-idp-primary w-100 py-3 fw-bold"
+                class="btn btn-jupiter-primary w-100 py-3 fw-bold"
                 @click="openSignup(plan)"
               >
                 Sign Up Now
@@ -478,9 +478,9 @@ onMounted(fetchStatusAndPlans);
     </main>
 
     <!-- Footer Grid Line -->
-    <footer class="idp-footer">
-      <div class="idp-grid-container h-100 d-flex align-items-center justify-content-between px-0">
-        <span class="text-muted small">IDP &copy; 2026</span>
+    <footer class="jupiter-footer">
+      <div class="jupiter-grid-container h-100 d-flex align-items-center justify-content-between px-0">
+        <span class="text-muted small">Jupiter &copy; 2026</span>
         <span class="text-muted small">Importer Data Processor</span>
       </div>
     </footer>
@@ -493,7 +493,7 @@ onMounted(fetchStatusAndPlans);
       style="background: rgba(0, 0, 0, 0.8);"
     >
       <div class="modal-dialog modal-dialog-centered" style="max-width: 520px;">
-        <div class="modal-content idp-card">
+        <div class="modal-content jupiter-card">
           <div class="modal-header">
             <h5 class="modal-title text-white">
               {{ isSuperAdminSignup ? 'Super Admin Setup' : `Sign Up for ${selectedPlan?.name}` }}
@@ -508,17 +508,17 @@ onMounted(fetchStatusAndPlans);
               <div class="row g-3 mb-3">
                 <div class="col-md-6">
                   <label class="form-label">Full Name *</label>
-                  <input v-model="name" type="text" class="form-control idp-input" required placeholder="John Doe" />
+                  <input v-model="name" type="text" class="form-control jupiter-input" required placeholder="John Doe" />
                 </div>
                 <div class="col-md-6">
                   <label class="form-label">Mobile Number *</label>
-                  <input v-model="mobile" type="text" class="form-control idp-input" required placeholder="01XXXXXXXXX" />
+                  <input v-model="mobile" type="text" class="form-control jupiter-input" required placeholder="01XXXXXXXXX" />
                 </div>
               </div>
 
               <div class="mb-3">
                 <label class="form-label">Email Address *</label>
-                <input v-model="email" type="email" class="form-control idp-input" required placeholder="john@example.com" />
+                <input v-model="email" type="email" class="form-control jupiter-input" required placeholder="john@example.com" />
               </div>
 
               <div class="row g-3 mb-3">
@@ -528,7 +528,7 @@ onMounted(fetchStatusAndPlans);
                     <input
                       v-model="password"
                       :type="showPassword ? 'text' : 'password'"
-                      class="form-control idp-input"
+                      class="form-control jupiter-input"
                       style="padding-right: 42px !important;"
                       required
                       placeholder="••••••••"
@@ -549,7 +549,7 @@ onMounted(fetchStatusAndPlans);
                     <input
                       v-model="confirmPassword"
                       :type="showConfirmPassword ? 'text' : 'password'"
-                      class="form-control idp-input"
+                      class="form-control jupiter-input"
                       style="padding-right: 42px !important;"
                       required
                       placeholder="••••••••"
@@ -598,7 +598,7 @@ onMounted(fetchStatusAndPlans);
                     <input
                       v-model.number="paidAmount"
                       type="number"
-                      class="form-control idp-input font-monospace fw-bold text-white"
+                      class="form-control jupiter-input font-monospace fw-bold text-white"
                       :placeholder="basePlanFee.toString()"
                       required
                       min="1"
@@ -614,7 +614,7 @@ onMounted(fetchStatusAndPlans);
                     <input
                       v-model="trxId"
                       type="text"
-                      class="form-control idp-input font-monospace"
+                      class="form-control jupiter-input font-monospace"
                       placeholder="e.g. 8N3A5B2C"
                       required
                     />
@@ -649,7 +649,7 @@ onMounted(fetchStatusAndPlans);
 
               <button
                 type="submit"
-                class="btn btn-idp-primary w-100 py-3 fw-bold"
+                class="btn btn-jupiter-primary w-100 py-3 fw-bold"
                 :disabled="isSubmitting"
               >
                 {{ isSubmitting ? 'Submitting Registration...' : 'Complete Sign Up' }}

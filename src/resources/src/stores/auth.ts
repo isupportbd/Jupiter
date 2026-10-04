@@ -42,7 +42,7 @@ async function request<T>(method: "GET" | "POST", path: string, payload?: unknow
   try {
     const headers: Record<string, string> = {};
     try {
-      const token = localStorage.getItem("idp_access_token");
+      const token = localStorage.getItem("jupiter_access_token");
       if (token) {
         headers["Authorization"] = `Bearer ${token}`;
       }
@@ -79,13 +79,13 @@ export const useAuthStore = defineStore("auth", () => {
     isAuthenticated.value = !!value;
     if (value) {
       setUser(value);
-      try { localStorage.setItem("idp_auth_user", JSON.stringify(value)); } catch {}
+      try { localStorage.setItem("jupiter_auth_user", JSON.stringify(value)); } catch {}
     } else {
       clearUser();
       try {
-        localStorage.removeItem("idp_auth_user");
-        localStorage.removeItem("idp_access_token");
-        localStorage.removeItem("idp_refresh_token");
+        localStorage.removeItem("jupiter_auth_user");
+        localStorage.removeItem("jupiter_access_token");
+        localStorage.removeItem("jupiter_refresh_token");
       } catch {}
     }
   };
@@ -94,7 +94,7 @@ export const useAuthStore = defineStore("auth", () => {
     if (initialized.value && !forceRefresh) return;
 
     try {
-      const cached = localStorage.getItem("idp_auth_user");
+      const cached = localStorage.getItem("jupiter_auth_user");
       if (cached && !user.value) {
         const parsed = JSON.parse(cached);
         user.value = parsed;
@@ -104,7 +104,7 @@ export const useAuthStore = defineStore("auth", () => {
     } catch {}
 
     try {
-      const token = localStorage.getItem("idp_access_token");
+      const token = localStorage.getItem("jupiter_access_token");
       const headers: Record<string, string> = {};
       if (token) {
         headers["Authorization"] = `Bearer ${token}`;
@@ -133,9 +133,9 @@ export const useAuthStore = defineStore("auth", () => {
       const res = await request<AuthData>("POST", "/login", payload);
       // If direct login without OTP
       if (res?.data?.access_token) {
-        try { localStorage.setItem("idp_access_token", res.data.access_token); } catch {}
+        try { localStorage.setItem("jupiter_access_token", res.data.access_token); } catch {}
         if (res?.data?.refresh_token) {
-          try { localStorage.setItem("idp_refresh_token", res.data.refresh_token); } catch {}
+          try { localStorage.setItem("jupiter_refresh_token", res.data.refresh_token); } catch {}
         }
         syncUser((res?.data?.user || null) as AuthUser | null);
         initialized.value = true;
@@ -154,10 +154,10 @@ export const useAuthStore = defineStore("auth", () => {
     try {
       const res = await request<AuthData>("POST", "/verify-login-otp", payload);
       if (res?.data?.access_token) {
-        try { localStorage.setItem("idp_access_token", res.data.access_token); } catch {}
+        try { localStorage.setItem("jupiter_access_token", res.data.access_token); } catch {}
       }
       if (res?.data?.refresh_token) {
-        try { localStorage.setItem("idp_refresh_token", res.data.refresh_token); } catch {}
+        try { localStorage.setItem("jupiter_refresh_token", res.data.refresh_token); } catch {}
       }
       syncUser((res?.data?.user || null) as AuthUser | null);
       initialized.value = true;

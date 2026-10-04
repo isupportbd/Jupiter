@@ -13,7 +13,7 @@ const isSubscriptionExpired = computed(() => {
   return Number((authStore.user as any)?.daysRemaining || 0) <= 0;
 });
 
-type TabType = "local_lc" | "beneficiary" | "all_data" | "monthwise";
+type TabType = "local_lc" | "all_data" | "monthwise";
 const activeTab = ref<TabType>("local_lc");
 
 // Local LC Report State
@@ -41,7 +41,6 @@ const entryDateTo = ref("");
 const beneficiaryOptions = ref<{ name: string; address: string }[]>([]);
 const localBeneficiarySuggestions = ref<{ name: string; address: string }[]>([]);
 const showBeneficiaryDropdown = ref(false);
-const showBenBeneficiaryDropdown = ref(false);
 
 let localBenSearchTimeout: any = null;
 const searchLocalBeneficiariesFromApi = (query: string) => {
@@ -100,298 +99,6 @@ const handleBeneficiaryBlur = () => {
   setTimeout(() => {
     showBeneficiaryDropdown.value = false;
   }, 250);
-};
-
-// Beneficiary Report Tab State
-const benRecords = ref<any[]>([]);
-const benIsLoading = ref(false);
-const benIsExporting = ref(false);
-const benSearchQuery = ref("");
-const benBeneficiaryFilter = ref("");
-
-const benBeneficiarySuggestions = ref<{ name: string; address: string }[]>([]);
-let benSearchTimeout: any = null;
-
-const searchBeneficiariesFromApi = (query: string) => {
-  clearTimeout(benSearchTimeout);
-  const q = (query || "").trim();
-  if (!q) {
-    benBeneficiarySuggestions.value = [];
-    showBenBeneficiaryDropdown.value = false;
-    return;
-  }
-  showBenBeneficiaryDropdown.value = true;
-  benBeneficiarySuggestions.value = beneficiaryOptions.value
-    .filter((b) => b.name && b.name.toLowerCase().includes(q.toLowerCase()))
-    .slice(0, 50);
-
-  // Query backend for full database matches
-  benSearchTimeout = setTimeout(async () => {
-    try {
-      const res = await axios.get("/api/bond/beneficiaries", {
-        params: { search: q }
-      });
-      if (res.data && res.data.success && Array.isArray(res.data.data)) {
-        benBeneficiarySuggestions.value = res.data.data;
-      }
-    } catch (_) {}
-  }, 150);
-};
-
-const benLcDateFrom = ref("");
-const benLcDateTo = ref("");
-const benEntryDateFrom = ref("");
-const benEntryDateTo = ref("");
-const benCurrentPage = ref(1);
-const benPageSize = ref(10);
-const benTotalRecords = ref(0);
-const benTotalPages = ref(1);
-
-const handleBenBeneficiaryFocus = () => {
-  if (benBeneficiaryFilter.value.trim().length >= 1) {
-    searchBeneficiariesFromApi(benBeneficiaryFilter.value);
-  } else {
-    showBenBeneficiaryDropdown.value = false;
-    benBeneficiarySuggestions.value = [];
-  }
-};
-
-const handleBenBeneficiaryInput = () => {
-  const q = benBeneficiaryFilter.value.trim();
-  if (!q) {
-    showBenBeneficiaryDropdown.value = false;
-    benBeneficiarySuggestions.value = [];
-    benRecords.value = [];
-    benTotalRecords.value = 0;
-    benTotalPages.value = 1;
-    return;
-  }
-  searchBeneficiariesFromApi(benBeneficiaryFilter.value);
-  // Automatically filter the table with the typed word!
-  handleBenSearchInput();
-};
-
-const handleBenBeneficiaryBlur = () => {
-  setTimeout(() => {
-    showBenBeneficiaryDropdown.value = false;
-  }, 250);
-};
-
-const selectBenBeneficiary = (item: { name: string; address: string }) => {
-  benBeneficiaryFilter.value = item.name;
-  showBenBeneficiaryDropdown.value = false;
-  fetchBeneficiaryData(1);
-};
-
-const clearBenLcDate = () => {
-  benLcDateFrom.value = "";
-  benLcDateTo.value = "";
-  if (benBeneficiaryFilter.value.trim()) {
-    fetchBeneficiaryData(1);
-  }
-};
-
-const clearBenEntryDate = () => {
-  benEntryDateFrom.value = "";
-  benEntryDateTo.value = "";
-  if (benBeneficiaryFilter.value.trim()) {
-    fetchBeneficiaryData(1);
-  }
-};
-
-const clearBenSearch = () => {
-  benSearchQuery.value = "";
-  fetchBeneficiaryData(1);
-};
-
-const clearBenBeneficiary = () => {
-  benBeneficiaryFilter.value = "";
-  fetchBeneficiaryData(1);
-};
-
-const resetBenFilters = () => {
-  benSearchQuery.value = "";
-  benBeneficiaryFilter.value = "";
-  benLcDateFrom.value = "";
-  benLcDateTo.value = "";
-  benEntryDateFrom.value = "";
-  benEntryDateTo.value = "";
-  benRecords.value = [];
-  benTotalRecords.value = 0;
-  benTotalPages.value = 1;
-};
-
-let benDebounceTimer: any = null;
-const handleBenSearchInput = () => {
-  clearTimeout(benDebounceTimer);
-  benDebounceTimer = setTimeout(() => {
-    fetchBeneficiaryData(1);
-  }, 350);
-};
-
-const handleBenFilterChange = () => {
-  fetchBeneficiaryData(1);
-};
-
-const changeBenPage = (page: number) => {
-  if (page < 1 || page > benTotalPages.value || page === benCurrentPage.value) return;
-  fetchBeneficiaryData(page);
-};
-
-const fetchBeneficiaryData = async (page = 1) => {
-  const targetBeneficiary = benBeneficiaryFilter.value.trim();
-  const targetSearch = benSearchQuery.value.trim();
-
-  // If both beneficiary and search query are empty, show initial empty state
-  if (!targetBeneficiary && !targetSearch) {
-    benRecords.value = [];
-    benTotalRecords.value = 0;
-    benTotalPages.value = 1;
-    benCurrentPage.value = 1;
-    benIsLoading.value = false;
-    return;
-  }
-
-  benIsLoading.value = true;
-  benCurrentPage.value = page;
-
-  try {
-    const res = await axios.get("/api/bond/reports/local-lc", {
-      params: {
-        page: benCurrentPage.value,
-        limit: benPageSize.value,
-        search: targetSearch || undefined,
-        beneficiary: targetBeneficiary || undefined,
-        lcDateFrom: benLcDateFrom.value || undefined,
-        lcDateTo: benLcDateTo.value || undefined,
-        entryDateFrom: benEntryDateFrom.value || undefined,
-        entryDateTo: benEntryDateTo.value || undefined
-      }
-    });
-
-    if (res.data && res.data.success) {
-      benRecords.value = res.data.data || [];
-      const pag = res.data.pagination;
-      if (pag) {
-        benTotalRecords.value = pag.total || 0;
-        benTotalPages.value = pag.totalPages || 1;
-        benCurrentPage.value = pag.page || 1;
-      }
-    }
-  } catch (err: any) {
-    console.error("Failed to load Beneficiary report:", err);
-  } finally {
-    benIsLoading.value = false;
-  }
-};
-
-const exportBenToExcel = async () => {
-  if (isSubscriptionExpired.value) {
-    alert("Your subscription has expired. Excel export is disabled. You can continue viewing reports on screen. Please contact the Administrator to renew.");
-    return;
-  }
-  const targetBeneficiary = benBeneficiaryFilter.value.trim();
-  if (!targetBeneficiary || benTotalRecords.value === 0) return;
-  benIsExporting.value = true;
-
-  try {
-    const res = await axios.get("/api/bond/reports/local-lc", {
-      params: {
-        export: "true",
-        search: benSearchQuery.value || undefined,
-        beneficiary: targetBeneficiary,
-        lcDateFrom: benLcDateFrom.value || undefined,
-        lcDateTo: benLcDateTo.value || undefined,
-        entryDateFrom: benEntryDateFrom.value || undefined,
-        entryDateTo: benEntryDateTo.value || undefined
-      }
-    });
-
-    const exportRows: any[] = res.data?.data || [];
-    if (exportRows.length === 0) {
-      alert("No data available to export.");
-      return;
-    }
-
-    const workbook = new ExcelJS.Workbook();
-    workbook.creator = "Jupiter";
-    const sheet = workbook.addWorksheet("Beneficiary LC Report", {
-      views: [{ showGridLines: true }]
-    });
-
-    // Header Title Block
-    const benTitle = targetBeneficiary ? `Beneficiary LC Report - ${targetBeneficiary}` : "Beneficiary LC Report";
-    sheet.mergeCells("A1:F1");
-    const titleCell = sheet.getCell("A1");
-    titleCell.value = benTitle;
-    titleCell.font = { name: "Calibri", size: 14, bold: true, color: { argb: "FFFFFF" } };
-    titleCell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "0F172A" } };
-    titleCell.alignment = { vertical: "middle", horizontal: "center" };
-    sheet.getRow(1).height = 30;
-
-    sheet.addRow([]);
-
-    // Table Columns
-    sheet.columns = [
-      { header: "#", key: "sl", width: 8 },
-      { header: "LC ID", key: "lcId", width: 22 },
-      { header: "LC Date", key: "lcDate", width: 14 },
-      { header: "Bank", key: "bankName", width: 25 },
-      { header: "Branch", key: "branchName", width: 20 },
-      { header: "Entry Date", key: "entryDate", width: 14 }
-    ];
-
-    const headerRow = sheet.getRow(3);
-    headerRow.height = 24;
-    headerRow.eachCell((cell) => {
-      cell.font = { name: "Calibri", size: 11, bold: true, color: { argb: "FFFFFF" } };
-      cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "1E293B" } };
-      cell.alignment = { vertical: "middle", horizontal: "center" };
-    });
-
-    exportRows.forEach((item, index) => {
-      const row = sheet.addRow({
-        sl: index + 1,
-        lcId: item.lcId || "",
-        lcDate: formatDate(item.lcDate),
-        bankName: item.bankName || "",
-        branchName: item.branchName || "",
-        entryDate: formatDate(item.entryDate)
-      });
-      row.height = 20;
-      row.eachCell((cell, colNumber) => {
-        cell.font = { name: "Calibri", size: 10 };
-        cell.alignment = {
-          vertical: "middle",
-          horizontal: colNumber === 1 || colNumber === 3 || colNumber === 6 ? "center" : "left"
-        };
-        cell.border = {
-          top: { style: "thin", color: { argb: "E2E8F0" } },
-          left: { style: "thin", color: { argb: "E2E8F0" } },
-          bottom: { style: "thin", color: { argb: "E2E8F0" } },
-          right: { style: "thin", color: { argb: "E2E8F0" } }
-        };
-      });
-    });
-
-    const buffer = await workbook.xlsx.writeBuffer();
-    const blob = new Blob([buffer], {
-      type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-    });
-    const url = window.URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    const todayStr = new Date().toISOString().slice(0, 10);
-    link.href = url;
-    link.download = `Beneficiary_Report_2_${todayStr}.xlsx`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    window.URL.revokeObjectURL(url);
-  } catch (err: any) {
-    alert(err.message || "Failed to export Excel.");
-  } finally {
-    benIsExporting.value = false;
-  }
 };
 
 let debounceTimer: any = null;
@@ -1075,7 +782,7 @@ onMounted(() => {
 
 <template>
   <div class="reports-page pt-1 pb-3">
-    <!-- Centered Tabs (Local LC Report, Beneficiary Report, Monthwise Summary) -->
+    <!-- Centered Tabs (Beneficiary Report, Local LC Report, Monthwise Summary) -->
     <div class="d-flex align-items-center justify-content-center mb-2">
       <div class="reports-tabs-wrapper">
         <ul class="nav nav-tabs reports-tabs border-0" role="tablist">
@@ -1089,19 +796,6 @@ onMounted(() => {
             >
               <i class="bi bi-file-earmark-text me-2 tab-icon-blue"></i>
               <span>Beneficiary Report</span>
-            </button>
-          </li>
-
-          <!-- Tab 2: Beneficiary Report-2 (Green/Emerald Theme) -->
-          <li class="nav-item" role="presentation">
-            <button
-              type="button"
-              class="nav-link report-tab-btn tab-beneficiary"
-              :class="{ active: activeTab === 'beneficiary' }"
-              @click="setActiveTab('beneficiary')"
-            >
-              <i class="bi bi-person-lines-fill me-2 tab-icon-green"></i>
-              <span>Beneficiary Report-2</span>
             </button>
           </li>
 
@@ -1139,7 +833,7 @@ onMounted(() => {
 
     <!-- Tab Content Area -->
     <div class="tab-content">
-      <!-- 1 & 3: Beneficiary Report & All Data Report Content -->
+      <!-- Beneficiary Report & Local LC Report Content (shared filters) -->
       <div v-if="activeTab === 'local_lc' || activeTab === 'all_data'" class="local-lc-tab-pane">
         <!-- Filter Bar: 4-Column Layout (LC Date Range | Entry Date Range | Beneficiary & Search | Reset & Excel) -->
         <div class="filter-bar mb-3">
@@ -1334,7 +1028,7 @@ onMounted(() => {
 
         <!-- 11-Column Local LC Table Card Container -->
         <div class="table-card-wrapper p-2.5 shadow-sm rounded">
-          <div class="idp-table-container position-relative">
+          <div class="jupiter-table-container position-relative">
             <!-- Loading Spinner Overlay -->
             <div v-if="isLoading" class="table-loading-overlay d-flex align-items-center justify-content-center">
               <div class="spinner-border text-info spinner-border-sm me-2" role="status"></div>
@@ -1342,7 +1036,7 @@ onMounted(() => {
             </div>
 
             <!-- Tab 1: Curated Beneficiary Report Table (11 Columns) -->
-            <table v-if="activeTab === 'local_lc'" class="table idp-report-table mb-0 align-middle text-nowrap">
+            <table v-if="activeTab === 'local_lc'" class="table jupiter-report-table mb-0 align-middle text-nowrap">
               <thead>
                 <tr>
                   <th class="ps-3 text-center" style="width: 45px;">#</th>
@@ -1395,7 +1089,7 @@ onMounted(() => {
             </table>
 
             <!-- Tab 3: Complete All Data Report Table (All 31 Columns) -->
-            <table v-else-if="activeTab === 'all_data'" class="table idp-report-table mb-0 align-middle text-nowrap">
+            <table v-else-if="activeTab === 'all_data'" class="table jupiter-report-table mb-0 align-middle text-nowrap">
               <thead>
                 <tr>
                   <th class="ps-3 text-center" style="width: 45px;">#</th>
@@ -1551,318 +1245,6 @@ onMounted(() => {
         </div>
       </div>
 
-      <!-- 2. Beneficiary Report Content -->
-      <div v-if="activeTab === 'beneficiary'" class="beneficiary-tab-pane">
-        <!-- Filter Bar: 4-Column Layout (Beneficiary & Search | LC Date Range | Entry Date Range | Reset & Excel) -->
-        <div class="filter-bar mb-3">
-          <div class="row g-2 align-items-stretch">
-            <!-- 1. Beneficiary Name (Top) & Search (Bottom) -->
-            <div class="col-12 col-md-6 col-lg">
-              <div class="d-flex flex-column justify-content-between h-100 gap-1">
-                <!-- Beneficiary Input with Name & Address Autocomplete -->
-                <div class="position-relative w-100">
-                  <div class="input-group input-group-sm">
-                    <span class="input-group-text filter-addon" title="Beneficiary Name">
-                      <i class="bi bi-person-badge"></i>
-                    </span>
-                    <input
-                      v-model="benBeneficiaryFilter"
-                      type="text"
-                      class="form-control form-control-sm filter-input"
-                      placeholder="Type to search Beneficiary..."
-                      autocomplete="off"
-                      @focus="handleBenBeneficiaryFocus"
-                      @input="handleBenBeneficiaryInput"
-                      @blur="handleBenBeneficiaryBlur"
-                      @keydown.esc="showBenBeneficiaryDropdown = false"
-                    />
-                    <button
-                      v-if="benBeneficiaryFilter"
-                      type="button"
-                      class="btn filter-clear-btn"
-                      title="Clear Beneficiary"
-                      @click="clearBenBeneficiary"
-                    >
-                      <i class="bi bi-x"></i>
-                    </button>
-                  </div>
-
-                  <!-- Dropdown Menu with Name & Address -->
-                  <div
-                    v-if="showBenBeneficiaryDropdown && benBeneficiarySuggestions.length > 0"
-                    class="beneficiary-autocomplete-dropdown shadow-lg"
-                  >
-                    <div
-                      v-for="(item, bIdx) in benBeneficiarySuggestions"
-                      :key="bIdx"
-                      class="beneficiary-autocomplete-item"
-                      @mousedown.prevent="selectBenBeneficiary(item)"
-                    >
-                      <div class="ben-item-name">{{ item.name }}</div>
-                      <div v-if="item.address" class="ben-item-address text-truncate">
-                        <i class="bi bi-geo-alt me-1 text-info opacity-75"></i>{{ item.address }}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                <!-- Search Input -->
-                <div class="input-group input-group-sm">
-                  <span class="input-group-text filter-addon" title="Search">
-                    <i class="bi bi-search"></i>
-                  </span>
-                  <input
-                    v-model="benSearchQuery"
-                    type="text"
-                    class="form-control form-control-sm filter-input"
-                    placeholder="Search"
-                    @input="handleBenSearchInput"
-                  />
-                  <button
-                    v-if="benSearchQuery"
-                    type="button"
-                    class="btn filter-clear-btn"
-                    title="Clear Search"
-                    @click="clearBenSearch"
-                  >
-                    <i class="bi bi-x"></i>
-                  </button>
-                </div>
-              </div>
-            </div>
-
-            <!-- 2. LC Date Range -->
-            <div class="col-12 col-md-6 col-lg-3">
-              <div class="filter-column-box p-2 rounded">
-                <div class="d-flex justify-content-between align-items-center mb-1">
-                  <span class="filter-label mb-0">
-                    <i class="bi bi-calendar-check text-info"></i>
-                    <span>LC Date Range</span>
-                  </span>
-                  <button
-                    v-if="benLcDateFrom || benLcDateTo"
-                    type="button"
-                    class="btn-clear-date"
-                    @click="clearBenLcDate"
-                  >
-                    Clear
-                  </button>
-                </div>
-                <div class="d-flex align-items-center gap-1">
-                  <input
-                    v-model="benLcDateFrom"
-                    type="date"
-                    class="form-control form-control-sm filter-date-input"
-                    title="LC Start Date"
-                    @change="handleBenFilterChange"
-                  />
-                  <span class="text-muted small px-1">to</span>
-                  <input
-                    v-model="benLcDateTo"
-                    type="date"
-                    class="form-control form-control-sm filter-date-input"
-                    :min="benLcDateFrom || undefined"
-                    title="LC End Date"
-                    @change="handleBenFilterChange"
-                  />
-                </div>
-              </div>
-            </div>
-
-            <!-- 3. Entry Date Range -->
-            <div class="col-12 col-md-6 col-lg-3">
-              <div class="filter-column-box p-2 rounded">
-                <div class="d-flex justify-content-between align-items-center mb-1">
-                  <span class="filter-label mb-0">
-                    <i class="bi bi-clock-history text-info"></i>
-                    <span>Entry Date Range</span>
-                  </span>
-                  <button
-                    v-if="benEntryDateFrom || benEntryDateTo"
-                    type="button"
-                    class="btn-clear-date"
-                    @click="clearBenEntryDate"
-                  >
-                    Clear
-                  </button>
-                </div>
-                <div class="d-flex align-items-center gap-1">
-                  <input
-                    v-model="benEntryDateFrom"
-                    type="date"
-                    class="form-control form-control-sm filter-date-input"
-                    title="Entry Start Date"
-                    @change="handleBenFilterChange"
-                  />
-                  <span class="text-muted small px-1">to</span>
-                  <input
-                    v-model="benEntryDateTo"
-                    type="date"
-                    class="form-control form-control-sm filter-date-input"
-                    :min="benEntryDateFrom || undefined"
-                    title="Entry End Date"
-                    @change="handleBenFilterChange"
-                  />
-                </div>
-              </div>
-            </div>
-
-            <!-- 4. Reset Button (Top) & Excel Button (Bottom) -->
-            <div class="col-auto">
-              <div class="d-flex flex-column justify-content-between h-100 gap-1">
-                <!-- Reset Button -->
-                <button
-                  type="button"
-                  class="btn-reset-filter justify-content-center"
-                  title="Clear all filters"
-                  @click="resetBenFilters"
-                >
-                  <i class="bi bi-arrow-counterclockwise"></i>
-                  <span>Reset</span>
-                </button>
-
-                <!-- Excel Export Button -->
-                <button
-                  type="button"
-                  class="btn-export-excel justify-content-center"
-                  :disabled="benIsExporting || benTotalRecords === 0"
-                  title="Download formatted Excel file"
-                  @click="exportBenToExcel"
-                >
-                  <span v-if="benIsExporting" class="spinner-border spinner-border-sm"></span>
-                  <i v-else class="bi bi-file-earmark-excel"></i>
-                  <span>{{ benIsExporting ? 'Exporting...' : 'Excel' }}</span>
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <!-- 5-Column Beneficiary LC Table Card Container -->
-        <div class="table-card-wrapper p-2.5 shadow-sm rounded">
-          <div class="position-relative idp-table-container">
-            <!-- Loading overlay -->
-            <div
-              v-if="benIsLoading"
-              class="table-loading-overlay d-flex flex-column align-items-center justify-content-center"
-            >
-              <div class="spinner-border text-info mb-2" role="status">
-                <span class="visually-hidden">Loading...</span>
-              </div>
-              <span class="text-info fw-medium" style="font-size: 0.85rem;">Loading LC Records...</span>
-            </div>
-
-            <table class="idp-report-table">
-              <thead>
-                <tr>
-                  <th class="ps-3 text-center" style="width: 50px;">#</th>
-                  <th>LC ID</th>
-                  <th>LC Date</th>
-                  <th>Bank</th>
-                  <th>Branch</th>
-                  <th class="pe-3">Entry Date</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr v-if="!benBeneficiaryFilter.trim() && !benSearchQuery.trim() && !benIsLoading">
-                  <td colspan="6" class="text-center py-5 text-muted">
-                    <i class="bi bi-search display-6 d-block mb-2 text-info opacity-50"></i>
-                    <span>Please search or select a Beneficiary to view its LC records.</span>
-                  </td>
-                </tr>
-
-                <tr v-else-if="benRecords.length === 0 && !benIsLoading">
-                  <td colspan="6" class="text-center py-5 text-muted">
-                    <i class="bi bi-inbox display-6 d-block mb-2 text-secondary opacity-50"></i>
-                    <span>No LC records found for the selected beneficiary criteria.</span>
-                  </td>
-                </tr>
-
-                <tr v-for="(row, idx) in benRecords" :key="row.id || idx">
-                  <td class="ps-3 text-center cell-num">
-                    {{ (benCurrentPage - 1) * benPageSize + idx + 1 }}
-                  </td>
-                  <td class="cell-lc-id fw-medium">{{ row.lcId || '-' }}</td>
-                  <td class="cell-muted font-monospace">{{ formatDate(row.lcDate) }}</td>
-                  <td class="cell-main">{{ row.bankName || '-' }}</td>
-                  <td class="cell-muted">{{ row.branchName || '-' }}</td>
-                  <td class="pe-3 cell-muted font-monospace">{{ formatDate(row.entryDate) }}</td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-
-          <!-- 10-per-page Pagination Footer -->
-          <div class="d-flex align-items-center justify-content-between flex-wrap gap-3 mt-2 pt-2 border-top-subtle">
-            <div class="pagination-info text-muted small">
-              Showing
-              <span class="text-light fw-medium">
-                {{ benTotalRecords === 0 ? 0 : (benCurrentPage - 1) * benPageSize + 1 }}
-              </span>
-              to
-              <span class="text-light fw-medium">
-                {{ Math.min(benCurrentPage * benPageSize, benTotalRecords) }}
-              </span>
-              of
-              <span class="text-light fw-medium">{{ benTotalRecords.toLocaleString() }}</span>
-              entries
-            </div>
-
-            <!-- Page Buttons -->
-            <div class="pagination-controls d-flex align-items-center gap-1">
-              <!-- First Page -->
-              <button
-                type="button"
-                class="btn-page"
-                :disabled="benCurrentPage <= 1 || benIsLoading"
-                title="First Page"
-                @click="changeBenPage(1)"
-              >
-                <i class="bi bi-chevron-double-left"></i>
-              </button>
-
-              <!-- Previous Page -->
-              <button
-                type="button"
-                class="btn-page"
-                :disabled="benCurrentPage <= 1 || benIsLoading"
-                title="Previous Page"
-                @click="changeBenPage(benCurrentPage - 1)"
-              >
-                <i class="bi bi-chevron-left"></i>
-              </button>
-
-              <!-- Current / Total Page Badge -->
-              <span class="page-indicator mx-2">
-                Page <strong class="text-white">{{ benCurrentPage }}</strong> of <strong class="text-white">{{ benTotalPages }}</strong>
-              </span>
-
-              <!-- Next Page -->
-              <button
-                type="button"
-                class="btn-page"
-                :disabled="benCurrentPage >= benTotalPages || benIsLoading"
-                title="Next Page"
-                @click="changeBenPage(benCurrentPage + 1)"
-              >
-                <i class="bi bi-chevron-right"></i>
-              </button>
-
-              <!-- Last Page -->
-              <button
-                type="button"
-                class="btn-page"
-                :disabled="benCurrentPage >= benTotalPages || benIsLoading"
-                title="Last Page"
-                @click="changeBenPage(benTotalPages)"
-              >
-                <i class="bi bi-chevron-double-right"></i>
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
-
       <!-- 3. Monthwise Summary Content -->
       <div v-if="activeTab === 'monthwise'" class="monthwise-tab-pane">
         <!-- Filter Bar: 2 Compact Filters + Reset & Excel (Centered to match top tabs) -->
@@ -1975,7 +1357,7 @@ onMounted(() => {
 
         <!-- 5-Column Monthwise Table Card Container -->
         <div class="table-card-wrapper p-2.5 shadow-sm rounded">
-          <div class="position-relative idp-table-container">
+          <div class="position-relative jupiter-table-container">
             <!-- Loading overlay -->
             <div
               v-if="mwIsLoading"
@@ -1987,7 +1369,7 @@ onMounted(() => {
               <span class="text-info fw-medium" style="font-size: 0.85rem;">Loading Monthwise Data...</span>
             </div>
 
-            <table class="idp-report-table">
+            <table class="jupiter-report-table">
               <thead>
                 <tr>
                   <th class="ps-3 text-center" style="width: 44px;">
@@ -2222,31 +1604,7 @@ onMounted(() => {
   color: #7dd3fc;
 }
 
-/* 2. Beneficiary Report Tab (Emerald/Green Theme) */
-.tab-beneficiary .tab-icon-green {
-  color: #34d399;
-  transition: transform 0.2s ease;
-}
-
-.tab-beneficiary:hover {
-  color: #d1fae5;
-  background: rgba(16, 185, 129, 0.08);
-  border-color: rgba(16, 185, 129, 0.2);
-}
-
-.tab-beneficiary.active {
-  background: linear-gradient(135deg, rgba(16, 185, 129, 0.25) 0%, rgba(15, 23, 42, 0.95) 100%) !important;
-  color: #34d399 !important;
-  border-color: #059669 !important;
-  box-shadow: 0 2px 10px rgba(16, 185, 129, 0.3);
-}
-
-.tab-beneficiary.active .tab-icon-green {
-  transform: scale(1.1);
-  color: #6ee7b7;
-}
-
-/* 3. All Data Report Tab (Purple/Indigo Theme) */
+/* 2. Local LC Report Tab (Purple/Indigo Theme) */
 .tab-all-data .tab-icon-purple {
   color: #c084fc;
   transition: transform 0.2s ease;
@@ -2492,7 +1850,7 @@ onMounted(() => {
 }
 
 /* Table Container & 11 Columns */
-.idp-table-container {
+.jupiter-table-container {
   background: #111722;
   border: 1px solid #1e293b;
   border-radius: 6px;
@@ -2510,14 +1868,14 @@ onMounted(() => {
   backdrop-filter: blur(2px);
 }
 
-.idp-report-table {
+.jupiter-report-table {
   width: 100%;
   font-size: 0.86rem;
   color: #e2e8f0;
   border-collapse: collapse;
 }
 
-.idp-report-table thead th {
+.jupiter-report-table thead th {
   background: #161e2c;
   color: #94a3b8;
   font-weight: 600;
@@ -2528,7 +1886,7 @@ onMounted(() => {
   white-space: nowrap;
 }
 
-.idp-report-table tbody td {
+.jupiter-report-table tbody td {
   padding: 0.6rem 0.85rem;
   border-bottom: 1px solid rgba(255, 255, 255, 0.04);
   background: transparent;
@@ -2536,7 +1894,7 @@ onMounted(() => {
   font-size: 0.86rem;
 }
 
-.idp-report-table tbody tr:hover td {
+.jupiter-report-table tbody tr:hover td {
   background: rgba(148, 163, 184, 0.05);
 }
 
@@ -2663,7 +2021,7 @@ onMounted(() => {
   margin-top: 1px;
 }
 
-.idp-report-table tfoot .table-total-row td {
+.jupiter-report-table tfoot .table-total-row td {
   background: #151d2b !important;
   border-top: 1px solid #334155 !important;
   border-bottom: 2px solid #38bdf8 !important;

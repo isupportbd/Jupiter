@@ -57,7 +57,7 @@ const isProcessingAction = ref(false);
 const fetchUsers = async () => {
   isLoading.value = true;
   try {
-    const token = localStorage.getItem("idp_access_token");
+    const token = localStorage.getItem("jupiter_access_token");
     const res = await axios.get("/api/auth/admin/users", {
       params: {
         search: searchQuery.value.trim() || undefined,
@@ -99,7 +99,7 @@ const confirmApprove = async () => {
   if (!selectedUser.value) return;
   isProcessingAction.value = true;
   try {
-    const token = localStorage.getItem("idp_access_token");
+    const token = localStorage.getItem("jupiter_access_token");
     const res = await axios.post(
       `/api/auth/admin/users/${selectedUser.value.id}/approve`,
       { days: approvalDays.value },
@@ -128,7 +128,7 @@ const confirmRenew = async () => {
   if (!selectedUser.value) return;
   isProcessingAction.value = true;
   try {
-    const token = localStorage.getItem("idp_access_token");
+    const token = localStorage.getItem("jupiter_access_token");
     const res = await axios.post(
       `/api/auth/admin/users/${selectedUser.value.id}/renew`,
       { days: renewDays.value },
@@ -150,7 +150,7 @@ const confirmRenew = async () => {
 const toggleStatus = async (u: UserItem) => {
   const newStatus = u.status === "active" ? "suspended" : "active";
   try {
-    const token = localStorage.getItem("idp_access_token");
+    const token = localStorage.getItem("jupiter_access_token");
     const res = await axios.post(
       `/api/auth/admin/users/${u.id}/status`,
       { status: newStatus },
@@ -175,7 +175,7 @@ const confirmDelete = async () => {
   if (!selectedUser.value) return;
   isProcessingAction.value = true;
   try {
-    const token = localStorage.getItem("idp_access_token");
+    const token = localStorage.getItem("jupiter_access_token");
     const res = await axios.delete(`/api/auth/admin/users/${selectedUser.value.id}`, {
       headers: token ? { Authorization: `Bearer ${token}` } : undefined
     });

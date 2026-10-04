@@ -252,7 +252,7 @@ onUnmounted(() => {
   pointer-events: none;
 }
 
-.idp-search-box {
+.jupiter-search-box {
   background: #15181c !important;
   border: 1px solid #3a4149 !important;
   color: #f8f9fa !important;
@@ -262,7 +262,7 @@ onUnmounted(() => {
   height: 30px;
 }
 
-.idp-search-box:focus {
+.jupiter-search-box:focus {
   border-color: #0d6efd !important;
   box-shadow: none !important;
 }

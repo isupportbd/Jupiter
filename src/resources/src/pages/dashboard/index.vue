@@ -613,7 +613,7 @@ const handleGoToReports = () => {
       </div>
     </div>
 
-    <!-- DATA PREVIEW POPUP / MODAL (IDP-V2 Clean Standard Theme) -->
+    <!-- DATA PREVIEW POPUP / MODAL (Jupiter Clean Standard Theme) -->
     <div
       v-if="showPreviewModal"
       class="modal-backdrop-custom d-flex align-items-center justify-content-center"
@@ -641,7 +641,7 @@ const handleGoToReports = () => {
             <div class="d-flex align-items-center gap-3">
               <button
                 type="button"
-                class="btn btn-idp-save"
+                class="btn btn-jupiter-save"
                 :disabled="isSaving"
                 @click="handleCommitToDatabase"
               >
@@ -676,8 +676,8 @@ const handleGoToReports = () => {
 
           <!-- Modal Body: Bluish Dark Theme Table -->
           <div class="modal-body-custom p-3 px-4">
-            <div class="idp-table-container">
-              <table class="table idp-preview-table mb-0 align-middle text-nowrap">
+            <div class="jupiter-table-container">
+              <table class="table jupiter-preview-table mb-0 align-middle text-nowrap">
                 <thead>
                   <tr>
                     <th class="ps-3 text-center" style="width: 45px;">#</th>
@@ -919,7 +919,7 @@ const handleGoToReports = () => {
 }
 
 /* Add to Database Button */
-.btn-idp-save {
+.btn-jupiter-save {
   background: #1b6342;
   border: 1px solid #267c55;
   color: #e2e8f0;
@@ -936,13 +936,13 @@ const handleGoToReports = () => {
   transition: all 0.15s ease;
 }
 
-.btn-idp-save:hover:not(:disabled) {
+.btn-jupiter-save:hover:not(:disabled) {
   background: #237c54;
   border-color: #2e9365;
   color: #ffffff;
 }
 
-.btn-idp-save:disabled {
+.btn-jupiter-save:disabled {
   background: #1e293b;
   border-color: #334155;
   color: #64748b;
@@ -956,21 +956,21 @@ const handleGoToReports = () => {
 }
 
 /* Table Container & Rows */
-.idp-table-container {
+.jupiter-table-container {
   background: #111722;
   border: 1px solid #1e293b;
   border-radius: 6px;
   overflow: auto;
 }
 
-.idp-preview-table {
+.jupiter-preview-table {
   width: 100%;
   font-size: 0.81rem;
   color: #cbd5e1;
   border-collapse: collapse;
 }
 
-.idp-preview-table thead th {
+.jupiter-preview-table thead th {
   background: #161e2c;
   color: #78889b;
   font-weight: 500;
@@ -981,14 +981,14 @@ const handleGoToReports = () => {
   white-space: nowrap;
 }
 
-.idp-preview-table tbody td {
+.jupiter-preview-table tbody td {
   padding: 0.52rem 0.75rem;
   border-bottom: 1px solid rgba(255, 255, 255, 0.035);
   background: transparent;
   font-weight: 400;
 }
 
-.idp-preview-table tbody tr:hover td {
+.jupiter-preview-table tbody tr:hover td {
   background: rgba(148, 163, 184, 0.04);
 }
 
@@ -1052,7 +1052,7 @@ const handleGoToReports = () => {
   font-size: 0.78rem;
 }
 
-/* Floating Toast Notifications (Dark IDP Style) */
+/* Floating Toast Notifications (Dark Jupiter Style) */
 .custom-toast {
   background: #111722;
   border: 1px solid #1e293b;

@@ -11,12 +11,12 @@ import router from "./router";
 import "bootstrap/dist/css/bootstrap.min.css";
 import "bootstrap-icons/font/bootstrap-icons.css";
 import "@/assets/scss/custom.scss";
-import "@/assets/scss/idp-dark.scss";
+import "@/assets/scss/jupiter-dark.scss";
 import "bootstrap/dist/js/bootstrap.bundle.min.js";
 
 const app = createApp(App);
 const pinia = createPinia();
-const head = createHead({ titleTemplate: (title) => (title ? `${title} - IDP` : "IDP") });
+const head = createHead({ titleTemplate: (title) => (title ? `${title} - Jupiter` : "Jupiter") });
 
 app.use(pinia);
 app.use(router);

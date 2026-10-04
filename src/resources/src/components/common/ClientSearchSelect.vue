@@ -103,7 +103,7 @@ const clearSelection = () => {
       <input
         v-model="searchText"
         type="text"
-        class="form-control idp-input"
+        class="form-control jupiter-input"
         :style="{
           paddingLeft: '38px !important',
           paddingRight: searchText ? '34px !important' : '14px !important',

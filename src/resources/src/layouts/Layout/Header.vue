@@ -47,11 +47,11 @@ const handleLogout = async () => {
 </script>
 
 <template>
-  <header class="idp-navbar">
-    <div class="idp-grid-container h-100 d-flex align-items-center justify-content-between px-3">
+  <header class="jupiter-navbar">
+    <div class="jupiter-grid-container h-100 d-flex align-items-center justify-content-between px-3">
       <!-- Left: Brand Logo Only -->
       <div class="d-flex align-items-center" style="min-width: 140px;">
-        <router-link :to="isAdmin ? '/users' : '/'" class="idp-brand d-flex align-items-center gap-2.5 text-decoration-none">
+        <router-link :to="isAdmin ? '/users' : '/'" class="jupiter-brand d-flex align-items-center gap-2.5 text-decoration-none">
           <div class="brand-badge-icon">
             <svg width="24" height="24" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
               <defs>

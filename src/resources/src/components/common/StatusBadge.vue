@@ -58,7 +58,7 @@ const badgeConfig = computed(() => {
 
 <template>
   <span
-    class="idp-status-badge d-inline-flex align-items-center gap-1 font-monospace"
+    class="jupiter-status-badge d-inline-flex align-items-center gap-1 font-monospace"
     :class="[`badge-status-${badgeConfig.type}`, size === 'sm' ? 'badge-sm' : size === 'lg' ? 'badge-lg' : 'badge-md']"
   >
     <i :class="['bi', badgeConfig.icon]" class="status-icon"></i>
@@ -67,7 +67,7 @@ const badgeConfig = computed(() => {
 </template>
 
 <style scoped>
-.idp-status-badge {
+.jupiter-status-badge {
   display: inline-flex;
   align-items: center;
   border-radius: 9999px;

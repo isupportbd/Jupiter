@@ -85,19 +85,19 @@ onUnmounted(() => {
 
 <template>
   <div
-    class="idp-search-container position-relative"
+    class="jupiter-search-container position-relative"
     :style="{
       maxWidth: maxWidth,
       minWidth: minWidth,
       width: '100%'
     }"
   >
-    <i class="bi bi-search idp-search-icon" aria-hidden="true"></i>
+    <i class="bi bi-search jupiter-search-icon" aria-hidden="true"></i>
     <input
       ref="inputRef"
       :value="internalValue"
       type="text"
-      class="form-control idp-search-input"
+      class="form-control jupiter-search-input"
       :class="[`search-${size}`]"
       :placeholder="placeholder"
       :disabled="disabled"
@@ -110,7 +110,7 @@ onUnmounted(() => {
     <button
       v-if="internalValue"
       type="button"
-      class="idp-clear-btn"
+      class="jupiter-clear-btn"
       :class="[`clear-${size}`]"
       title="Clear search (Esc)"
       tabindex="-1"
@@ -122,13 +122,13 @@ onUnmounted(() => {
 </template>
 
 <style scoped>
-.idp-search-container {
+.jupiter-search-container {
   display: flex;
   align-items: center;
   position: relative;
 }
 
-.idp-search-icon {
+.jupiter-search-icon {
   position: absolute;
   left: 11px;
   top: 50%;
@@ -139,7 +139,7 @@ onUnmounted(() => {
   z-index: 2;
 }
 
-.idp-search-input {
+.jupiter-search-input {
   background-color: #15181c !important;
   border: 1px solid #3a4149 !important;
   color: #f8f9fa !important;
@@ -165,25 +165,25 @@ onUnmounted(() => {
   height: 44px;
 }
 
-.idp-search-input:focus {
+.jupiter-search-input:focus {
   border-color: #0d6efd !important;
   box-shadow: 0 0 0 0.18rem rgba(13, 110, 253, 0.22) !important;
   background-color: #181c22 !important;
   outline: none;
 }
 
-.idp-search-input::placeholder {
+.jupiter-search-input::placeholder {
   color: #6c757d !important;
   opacity: 0.85;
 }
 
-.idp-search-input:disabled {
+.jupiter-search-input:disabled {
   background-color: #1a1e24 !important;
   opacity: 0.6;
   cursor: not-allowed;
 }
 
-.idp-clear-btn {
+.jupiter-clear-btn {
   position: absolute;
   right: 6px;
   top: 50%;
@@ -204,7 +204,7 @@ onUnmounted(() => {
   font-size: 0.95rem;
 }
 
-.idp-clear-btn:hover {
+.jupiter-clear-btn:hover {
   color: #fff;
   background-color: rgba(255, 255, 255, 0.12);
 }
