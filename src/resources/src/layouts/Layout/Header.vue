@@ -108,19 +108,19 @@ const handleLogout = async () => {
               <div class="fw-bold text-white text-capitalize">
                 {{ authStore.user?.name || 'User' }}
               </div>
-              <div class="text-muted small text-truncate">
+              <div class="text-muted small text-truncate mb-2">
                 {{ authStore.user?.email || '' }}
               </div>
-              <div class="d-flex align-items-center gap-1.5 mt-1.5">
-                <span class="badge bg-primary text-white border border-primary font-monospace" style="font-size: 0.65rem; padding: 2px 6px;">
+              <div class="d-flex align-items-center gap-2 flex-wrap">
+                <span class="user-role-badge">
                   {{ (authStore.user as any)?.role?.name || (authStore.user as any)?.role || 'User' }}
                 </span>
                 <span
-                  v-if="!isAdmin && daysRemaining > 0"
-                  class="badge bg-success bg-opacity-20 text-success border border-success border-opacity-30 font-monospace"
-                  style="font-size: 0.65rem; padding: 2px 6px;"
+                  v-if="!isAdmin"
+                  :class="['user-days-badge', { 'is-expired': daysRemaining <= 0 }]"
                 >
-                  {{ daysRemaining }}d left
+                  <i :class="daysRemaining > 0 ? 'bi bi-clock-history me-1' : 'bi bi-exclamation-octagon-fill me-1'"></i>
+                  {{ daysRemaining > 1 ? `${daysRemaining} Days Left` : daysRemaining === 1 ? '1 Day Left' : 'Expired' }}
                 </span>
               </div>
             </div>
@@ -220,6 +220,39 @@ const handleLogout = async () => {
   align-items: center;
   justify-content: center;
   font-size: 0.85rem;
+}
+
+.user-role-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 8px;
+  background: rgba(37, 99, 235, 0.2);
+  border: 1px solid rgba(56, 189, 248, 0.4);
+  border-radius: 6px;
+  color: #38bdf8;
+  font-size: 0.72rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.user-days-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 8px;
+  background: rgba(34, 197, 94, 0.15);
+  border: 1px solid rgba(34, 197, 94, 0.4);
+  border-radius: 6px;
+  color: #4ade80;
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+}
+
+.user-days-badge.is-expired {
+  background: rgba(239, 68, 68, 0.15);
+  border-color: rgba(239, 68, 68, 0.4);
+  color: #f87171;
 }
 
 .dropdown-menu {
