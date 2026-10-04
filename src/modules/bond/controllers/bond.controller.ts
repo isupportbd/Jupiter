@@ -345,7 +345,7 @@ export const getBeneficiaries: Handler = async (c: any) => {
     const search = c.req.query("search")?.trim();
     const whereConditions: any[] = [
       eq(bondRecords.userId, userId),
-      sql`beneficiary_name is not null and trim(beneficiary_name) != ''`
+      sql`beneficiary_name is not null and length(trim(beneficiary_name)) > 1 and trim(beneficiary_name) !~ '^[.\\s,;:-]+$'`
     ];
 
     if (search) {
@@ -356,17 +356,21 @@ export const getBeneficiaries: Handler = async (c: any) => {
 
     const results = await db
       .select({
-        name: sql<string>`TRIM(beneficiary_name)`
+        name: sql<string>`regexp_replace(TRIM(beneficiary_name), '\\s+', ' ', 'g')`
       })
       .from(bondRecords)
       .where(and(...whereConditions))
-      .groupBy(sql`TRIM(beneficiary_name)`)
-      .orderBy(sql`TRIM(beneficiary_name) ASC`)
+      .groupBy(sql`regexp_replace(TRIM(beneficiary_name), '\\s+', ' ', 'g')`)
+      .orderBy(sql`regexp_replace(TRIM(beneficiary_name), '\\s+', ' ', 'g') ASC`)
       .limit(100);
 
-    const uniqueNames = results
-      .map((r: any) => String(r.name || "").trim())
-      .filter(Boolean);
+    const uniqueNames = Array.from(
+      new Set(
+        results
+          .map((r: any) => String(r.name || "").trim())
+          .filter((n: string) => n && n.length > 1 && !/^[.\s,;:-]+$/.test(n))
+      )
+    );
 
     return c.json({
       success: true,
@@ -414,9 +418,12 @@ export const getMonthwiseSummary: Handler = async (c: any) => {
         monthKey: sql<string>`TO_CHAR(COALESCE(entry_date, lc_date), 'YYYY-MM')`,
         monthLabel: sql<string>`TO_CHAR(COALESCE(entry_date, lc_date), 'FMMonth YYYY')`,
         totalRecords: sql<number>`COUNT(*)`,
-        totalLc: sql<number>`COUNT(DISTINCT lc_id)`,
-        totalBeneficiary: sql<number>`COUNT(DISTINCT CASE WHEN beneficiary_name IS NOT NULL AND TRIM(beneficiary_name) != '' THEN TRIM(beneficiary_name) END)`,
-        totalBank: sql<number>`COUNT(DISTINCT CASE WHEN bank_name IS NOT NULL AND TRIM(bank_name) != '' THEN TRIM(bank_name) END)`
+        totalLcRegular: sql<number>`COUNT(CASE WHEN lc_id IS NOT NULL AND TRIM(lc_id) != '' THEN 1 END)`,
+        totalBeneficiaryRegular: sql<number>`COUNT(CASE WHEN beneficiary_name IS NOT NULL AND TRIM(beneficiary_name) != '' THEN 1 END)`,
+        totalBankRegular: sql<number>`COUNT(CASE WHEN bank_name IS NOT NULL AND TRIM(bank_name) != '' THEN 1 END)`,
+        totalLcUnique: sql<number>`COUNT(DISTINCT CASE WHEN lc_id IS NOT NULL AND TRIM(lc_id) != '' THEN TRIM(lc_id) END)`,
+        totalBeneficiaryUnique: sql<number>`COUNT(DISTINCT CASE WHEN beneficiary_name IS NOT NULL AND TRIM(beneficiary_name) != '' THEN TRIM(beneficiary_name) END)`,
+        totalBankUnique: sql<number>`COUNT(DISTINCT CASE WHEN bank_name IS NOT NULL AND TRIM(bank_name) != '' THEN TRIM(bank_name) END)`
       })
       .from(bondRecords)
       .where(whereClause)
@@ -429,26 +436,43 @@ export const getMonthwiseSummary: Handler = async (c: any) => {
     const results = await query;
 
     let sumTotalRecords = 0;
-    let sumTotalLc = 0;
-    let sumTotalBeneficiary = 0;
-    let sumTotalBank = 0;
+    let sumTotalLcRegular = 0;
+    let sumTotalBeneficiaryRegular = 0;
+    let sumTotalBankRegular = 0;
+    let sumTotalLcUnique = 0;
+    let sumTotalBeneficiaryUnique = 0;
+    let sumTotalBankUnique = 0;
 
     const formattedResults = results.map((r: any) => {
       const recNum = Number(r.totalRecords || 0);
-      const lcNum = Number(r.totalLc || 0);
-      const benNum = Number(r.totalBeneficiary || 0);
-      const bankNum = Number(r.totalBank || 0);
+      const lcReg = Number(r.totalLcRegular || 0);
+      const benReg = Number(r.totalBeneficiaryRegular || 0);
+      const bankReg = Number(r.totalBankRegular || 0);
+      const lcUnq = Number(r.totalLcUnique || 0);
+      const benUnq = Number(r.totalBeneficiaryUnique || 0);
+      const bankUnq = Number(r.totalBankUnique || 0);
+
       sumTotalRecords += recNum;
-      sumTotalLc += lcNum;
-      sumTotalBeneficiary += benNum;
-      sumTotalBank += bankNum;
+      sumTotalLcRegular += lcReg;
+      sumTotalBeneficiaryRegular += benReg;
+      sumTotalBankRegular += bankReg;
+      sumTotalLcUnique += lcUnq;
+      sumTotalBeneficiaryUnique += benUnq;
+      sumTotalBankUnique += bankUnq;
+
       return {
         monthKey: r.monthKey,
         monthLabel: r.monthLabel || r.monthKey,
         totalRecords: recNum,
-        totalLc: lcNum,
-        totalBeneficiary: benNum,
-        totalBank: bankNum
+        totalLc: lcReg,
+        totalBeneficiary: benReg,
+        totalBank: bankReg,
+        totalLcRegular: lcReg,
+        totalBeneficiaryRegular: benReg,
+        totalBankRegular: bankReg,
+        totalLcUnique: lcUnq,
+        totalBeneficiaryUnique: benUnq,
+        totalBankUnique: bankUnq
       };
     });
 
@@ -458,9 +482,15 @@ export const getMonthwiseSummary: Handler = async (c: any) => {
       summary: {
         totalMonths: formattedResults.length,
         totalRecords: sumTotalRecords,
-        totalLc: sumTotalLc,
-        totalBeneficiary: sumTotalBeneficiary,
-        totalBank: sumTotalBank
+        totalLc: sumTotalLcRegular,
+        totalBeneficiary: sumTotalBeneficiaryRegular,
+        totalBank: sumTotalBankRegular,
+        totalLcRegular: sumTotalLcRegular,
+        totalBeneficiaryRegular: sumTotalBeneficiaryRegular,
+        totalBankRegular: sumTotalBankRegular,
+        totalLcUnique: sumTotalLcUnique,
+        totalBeneficiaryUnique: sumTotalBeneficiaryUnique,
+        totalBankUnique: sumTotalBankUnique
       }
     });
   } catch (error: any) {

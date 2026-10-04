@@ -83,8 +83,8 @@ const searchLocalBeneficiariesFromApi = (query: string) => {
   clearTimeout(localBenSearchTimeout);
   const q = (query || "").trim();
   if (!q) {
-    localBeneficiarySuggestions.value = beneficiaryOptions.value.slice(0, 50);
-    showBeneficiaryDropdown.value = localBeneficiarySuggestions.value.length > 0;
+    localBeneficiarySuggestions.value = [];
+    showBeneficiaryDropdown.value = false;
     return;
   }
   const filtered = beneficiaryOptions.value
@@ -101,21 +101,35 @@ const searchLocalBeneficiariesFromApi = (query: string) => {
       if (res.data && res.data.success && Array.isArray(res.data.data)) {
         const rawNames: string[] = res.data.data
           .map((item: any) => (typeof item === "string" ? item.trim() : String(item?.name || "").trim()))
-          .filter(Boolean);
+          .filter((name: string) => name && name.length > 1 && !/^[.\s,;:-]+$/.test(name));
         const uniqueNames = Array.from(new Set(rawNames));
-        localBeneficiarySuggestions.value = uniqueNames;
-        showBeneficiaryDropdown.value = uniqueNames.length > 0;
+        if (beneficiarySearchInput.value.trim()) {
+          localBeneficiarySuggestions.value = uniqueNames;
+          showBeneficiaryDropdown.value = uniqueNames.length > 0;
+        }
       }
     } catch (_) {}
   }, 150);
 };
 
 const handleBeneficiaryFocus = () => {
-  searchLocalBeneficiariesFromApi(beneficiarySearchInput.value);
+  const q = beneficiarySearchInput.value.trim();
+  if (q) {
+    searchLocalBeneficiariesFromApi(q);
+  } else {
+    localBeneficiarySuggestions.value = [];
+    showBeneficiaryDropdown.value = false;
+  }
 };
 
 const handleBeneficiaryInput = () => {
-  searchLocalBeneficiariesFromApi(beneficiarySearchInput.value);
+  const q = beneficiarySearchInput.value.trim();
+  if (!q) {
+    localBeneficiarySuggestions.value = [];
+    showBeneficiaryDropdown.value = false;
+  } else {
+    searchLocalBeneficiariesFromApi(q);
+  }
   if (selectedBeneficiaries.value.length === 0) {
     handleSearchInput();
   }
@@ -190,7 +204,7 @@ const fetchBeneficiaries = async () => {
       const raw = res.data.data || [];
       const names: string[] = raw
         .map((item: any) => (typeof item === "string" ? item.trim() : String(item?.name || "").trim()))
-        .filter(Boolean);
+        .filter((name: string) => name && name.length > 1 && !/^[.\s,;:-]+$/.test(name));
       beneficiaryOptions.value = Array.from(new Set(names));
     }
   } catch (_) {}
@@ -530,12 +544,48 @@ const mwIsExporting = ref(false);
 const mwYearFilter = ref("");
 const mwMonthFrom = ref("");
 const mwMonthTo = ref("");
-const mwSummary = ref<{ totalMonths: number; totalRecords: number; totalLc: number; totalBeneficiary: number; totalBank: number }>({
+
+// Interactive Count Mode State (false = Regular / Default, true = Unique)
+const isLcUnique = ref(false);
+const isBenUnique = ref(false);
+const isBankUnique = ref(false);
+
+const mwSummary = ref<{
+  totalMonths: number;
+  totalRecords: number;
+  totalLc: number;
+  totalBeneficiary: number;
+  totalBank: number;
+  totalLcRegular?: number;
+  totalBeneficiaryRegular?: number;
+  totalBankRegular?: number;
+  totalLcUnique?: number;
+  totalBeneficiaryUnique?: number;
+  totalBankUnique?: number;
+}>({
   totalMonths: 0,
   totalRecords: 0,
   totalLc: 0,
   totalBeneficiary: 0,
   totalBank: 0
+});
+
+const displaySummaryTotalLc = computed(() => {
+  return isLcUnique.value
+    ? (mwSummary.value.totalLcUnique ?? mwSummary.value.totalLc ?? 0)
+    : (mwSummary.value.totalLcRegular ?? mwSummary.value.totalLc ?? 0);
+});
+
+const displaySummaryTotalBen = computed(() => {
+  return isBenUnique.value
+    ? (mwSummary.value.totalBeneficiaryUnique ?? mwSummary.value.totalBeneficiary ?? 0)
+    : (mwSummary.value.totalBeneficiaryRegular ?? mwSummary.value.totalBeneficiary ?? 0);
+});
+
+const displaySummaryTotalBank = computed(() => {
+  return isBankUnique.value
+    ? (mwSummary.value.totalBankUnique ?? mwSummary.value.totalBank ?? 0)
+    : (mwSummary.value.totalBankRegular ?? mwSummary.value.totalBank ?? 0);
 });
 
 // Monthwise Selection & Deletion State
@@ -699,13 +749,17 @@ const exportMwToExcel = async () => {
     sheet.addRow([]);
 
     // Table Columns: #, Month, Total Records, Total LC, Total Beneficiary, Total Bank
+    const headerLc = isLcUnique.value ? "Total LC (Unique)" : "Total LC";
+    const headerBen = isBenUnique.value ? "Total Beneficiary (Unique)" : "Total Beneficiary";
+    const headerBank = isBankUnique.value ? "Total Bank (Unique)" : "Total Bank";
+
     sheet.columns = [
       { header: "#", key: "sl", width: 8 },
       { header: "Month", key: "month", width: 22 },
       { header: "Total Records", key: "totalRecords", width: 18 },
-      { header: "Total LC", key: "totalLc", width: 18 },
-      { header: "Total Beneficiary", key: "totalBeneficiary", width: 22 },
-      { header: "Total Bank", key: "totalBank", width: 18 }
+      { header: headerLc, key: "totalLc", width: 22 },
+      { header: headerBen, key: "totalBeneficiary", width: 24 },
+      { header: headerBank, key: "totalBank", width: 20 }
     ];
 
     const headerRow = sheet.getRow(3);
@@ -717,13 +771,17 @@ const exportMwToExcel = async () => {
     });
 
     mwRecords.value.forEach((item, index) => {
+      const lcVal = Number((isLcUnique.value ? item.totalLcUnique : (item.totalLcRegular ?? item.totalLc)) || 0);
+      const benVal = Number((isBenUnique.value ? item.totalBeneficiaryUnique : (item.totalBeneficiaryRegular ?? item.totalBeneficiary)) || 0);
+      const bankVal = Number((isBankUnique.value ? item.totalBankUnique : (item.totalBankRegular ?? item.totalBank)) || 0);
+
       const row = sheet.addRow({
         sl: index + 1,
         month: item.monthLabel || item.monthKey,
         totalRecords: Number(item.totalRecords || 0),
-        totalLc: Number(item.totalLc || 0),
-        totalBeneficiary: Number(item.totalBeneficiary || 0),
-        totalBank: Number(item.totalBank || 0)
+        totalLc: lcVal,
+        totalBeneficiary: benVal,
+        totalBank: bankVal
       });
       row.height = 20;
       row.eachCell((cell, colNumber) => {
@@ -749,9 +807,9 @@ const exportMwToExcel = async () => {
       sl: "",
       month: "Total",
       totalRecords: mwSummary.value.totalRecords,
-      totalLc: mwSummary.value.totalLc,
-      totalBeneficiary: mwSummary.value.totalBeneficiary,
-      totalBank: mwSummary.value.totalBank
+      totalLc: displaySummaryTotalLc.value,
+      totalBeneficiary: displaySummaryTotalBen.value,
+      totalBank: displaySummaryTotalBank.value
     });
     totalRow.height = 24;
     totalRow.eachCell((cell, colNumber) => {
@@ -1022,14 +1080,6 @@ onMounted(() => {
                       <i class="bi bi-x"></i>
                     </button>
                   </span>
-                  <button
-                    type="button"
-                    class="chip-clear-all-btn"
-                    title="Clear all selected companies"
-                    @click="clearAllBeneficiaries"
-                  >
-                    Clear all ({{ selectedBeneficiaries.length }})
-                  </button>
                 </div>
 
                 <!-- Search Input -->
@@ -1451,11 +1501,53 @@ onMounted(() => {
                     />
                   </th>
                   <th class="text-center" style="width: 48px;">#</th>
-                  <th style="width: 22%;">Month</th>
-                  <th class="text-end" style="width: 17%;">Total Records</th>
-                  <th class="text-end" style="width: 16%;">Total LC</th>
-                  <th class="text-end" style="width: 18%;">Total Beneficiary</th>
-                  <th class="text-end" style="width: 15%;">Total Bank</th>
+                  <th style="width: 20%;">Month</th>
+                  <th class="text-end" style="width: 15%;">Total Records</th>
+                  <th class="text-end" style="width: 17%;">
+                    <div class="d-inline-flex align-items-center justify-content-end gap-1.5 w-100">
+                      <span>Total LC</span>
+                      <button
+                        type="button"
+                        class="btn-count-mode"
+                        :class="{ active: isLcUnique }"
+                        :title="isLcUnique ? 'Click to show Regular (All) Count' : 'Click to show Unique Count'"
+                        @click.stop="isLcUnique = !isLcUnique"
+                      >
+                        <span class="mode-text">{{ isLcUnique ? 'Unique' : 'Regular' }}</span>
+                        <i :class="isLcUnique ? 'bi bi-fingerprint text-info' : 'bi bi-list-ol opacity-60'"></i>
+                      </button>
+                    </div>
+                  </th>
+                  <th class="text-end" style="width: 20%;">
+                    <div class="d-inline-flex align-items-center justify-content-end gap-1.5 w-100">
+                      <span>Total Beneficiary</span>
+                      <button
+                        type="button"
+                        class="btn-count-mode"
+                        :class="{ active: isBenUnique }"
+                        :title="isBenUnique ? 'Click to show Regular (All) Count' : 'Click to show Unique Count'"
+                        @click.stop="isBenUnique = !isBenUnique"
+                      >
+                        <span class="mode-text">{{ isBenUnique ? 'Unique' : 'Regular' }}</span>
+                        <i :class="isBenUnique ? 'bi bi-fingerprint text-info' : 'bi bi-list-ol opacity-60'"></i>
+                      </button>
+                    </div>
+                  </th>
+                  <th class="text-end" style="width: 16%;">
+                    <div class="d-inline-flex align-items-center justify-content-end gap-1.5 w-100">
+                      <span>Total Bank</span>
+                      <button
+                        type="button"
+                        class="btn-count-mode"
+                        :class="{ active: isBankUnique }"
+                        :title="isBankUnique ? 'Click to show Regular (All) Count' : 'Click to show Unique Count'"
+                        @click.stop="isBankUnique = !isBankUnique"
+                      >
+                        <span class="mode-text">{{ isBankUnique ? 'Unique' : 'Regular' }}</span>
+                        <i :class="isBankUnique ? 'bi bi-fingerprint text-info' : 'bi bi-list-ol opacity-60'"></i>
+                      </button>
+                    </div>
+                  </th>
                   <th class="pe-3 text-center" style="width: 75px;">Action</th>
                 </tr>
               </thead>
@@ -1489,13 +1581,13 @@ onMounted(() => {
                     {{ Number(row.totalRecords || 0).toLocaleString() }}
                   </td>
                   <td class="text-end cell-lc-id font-monospace fw-bold">
-                    {{ Number(row.totalLc || 0).toLocaleString() }}
+                    {{ Number((isLcUnique ? row.totalLcUnique : (row.totalLcRegular ?? row.totalLc)) || 0).toLocaleString() }}
                   </td>
                   <td class="text-end cell-main font-monospace fw-semibold text-info">
-                    {{ Number(row.totalBeneficiary || 0).toLocaleString() }}
+                    {{ Number((isBenUnique ? row.totalBeneficiaryUnique : (row.totalBeneficiaryRegular ?? row.totalBeneficiary)) || 0).toLocaleString() }}
                   </td>
                   <td class="text-end cell-val font-monospace fw-bold">
-                    {{ Number(row.totalBank || 0).toLocaleString() }}
+                    {{ Number((isBankUnique ? row.totalBankUnique : (row.totalBankRegular ?? row.totalBank)) || 0).toLocaleString() }}
                   </td>
                   <td class="pe-3 text-center">
                     <button
@@ -1522,13 +1614,13 @@ onMounted(() => {
                     {{ mwSummary.totalRecords.toLocaleString() }}
                   </td>
                   <td class="text-end cell-lc-id font-monospace fw-bold fs-6">
-                    {{ mwSummary.totalLc.toLocaleString() }}
+                    {{ displaySummaryTotalLc.toLocaleString() }}
                   </td>
                   <td class="text-end text-info font-monospace fw-bold fs-6">
-                    {{ mwSummary.totalBeneficiary.toLocaleString() }}
+                    {{ displaySummaryTotalBen.toLocaleString() }}
                   </td>
                   <td class="text-end cell-val font-monospace fw-bold fs-6">
-                    {{ mwSummary.totalBank.toLocaleString() }}
+                    {{ displaySummaryTotalBank.toLocaleString() }}
                   </td>
                   <td class="pe-3 text-center text-muted">—</td>
                 </tr>
@@ -2043,6 +2135,41 @@ onMounted(() => {
   border-radius: 6px;
   background: rgba(16, 22, 35, 0.5);
   margin-top: 1rem;
+}
+
+/* Interactive Unique/Regular count toggle buttons in Monthwise header */
+.btn-count-mode {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: #94a3b8;
+  font-size: 0.68rem;
+  font-weight: 500;
+  padding: 0.12rem 0.45rem;
+  border-radius: 20px;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  line-height: 1.2;
+}
+
+.btn-count-mode:hover {
+  background: rgba(56, 189, 248, 0.15);
+  border-color: rgba(56, 189, 248, 0.4);
+  color: #38bdf8;
+}
+
+.btn-count-mode.active {
+  background: rgba(56, 189, 248, 0.22);
+  border-color: #38bdf8;
+  color: #7dd3fc;
+  box-shadow: 0 0 8px rgba(56, 189, 248, 0.25);
+}
+
+.btn-count-mode .mode-text {
+  font-family: system-ui, -apple-system, sans-serif;
+  letter-spacing: 0.02em;
 }
 
 /* Custom Beneficiary Autocomplete Menu */
