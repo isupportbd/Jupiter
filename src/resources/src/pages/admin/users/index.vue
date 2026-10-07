@@ -11,6 +11,10 @@ interface UserItem {
   email: string;
   role: string;
   roleId?: number;
+  adminId?: number | null;
+  parentName?: string | null;
+  parentEmail?: string | null;
+  operatorsCount?: number;
   status: "pending" | "active" | "suspended" | "rejected";
   isExpired: boolean;
   daysRemaining: number;
@@ -49,10 +53,51 @@ const showToast = (msg: string, type: "success" | "danger" = "success") => {
 const showApproveModal = ref(false);
 const showRenewModal = ref(false);
 const showDeleteModal = ref(false);
+const showRoleModal = ref(false);
 const selectedUser = ref<UserItem | null>(null);
+const selectedRole = ref<string>("user");
+const selectedParentAdminId = ref<number | null>(null);
 const approvalDays = ref<number>(30);
 const renewDays = ref<number>(30);
 const isProcessingAction = ref(false);
+
+const potentialParents = computed(() => {
+  return usersList.value.filter(
+    (u) => u.role !== "superadmin" && u.role !== "operator" && u.id !== selectedUser.value?.id
+  );
+});
+
+const openRoleModal = (u: UserItem) => {
+  selectedUser.value = u;
+  selectedRole.value = u.role?.toLowerCase() || "user";
+  selectedParentAdminId.value = u.adminId || null;
+  showRoleModal.value = true;
+};
+
+const confirmChangeRole = async () => {
+  if (!selectedUser.value) return;
+  isProcessingAction.value = true;
+  try {
+    const token = localStorage.getItem("jupiter_access_token");
+    const res = await axios.post(
+      `/api/auth/admin/users/${selectedUser.value.id}/role`,
+      {
+        role: selectedRole.value,
+        adminId: selectedRole.value === "operator" ? selectedParentAdminId.value : null
+      },
+      { headers: token ? { Authorization: `Bearer ${token}` } : undefined }
+    );
+    if (res.data?.success) {
+      showToast(res.data.message || "User role updated successfully!");
+      showRoleModal.value = false;
+      fetchUsers();
+    }
+  } catch (err: any) {
+    showToast(err.response?.data?.message || "Failed to update role", "danger");
+  } finally {
+    isProcessingAction.value = false;
+  }
+};
 
 const fetchUsers = async () => {
   isLoading.value = true;
@@ -360,9 +405,25 @@ onMounted(() => {
                 >
                   {{ u.role.toUpperCase() }}
                 </span>
-                <span v-else class="badge-role-user">
-                  USER
-                </span>
+                <div
+                  v-else-if="u.role === 'operator' || u.adminId"
+                  class="d-flex flex-column align-items-center"
+                >
+                  <span class="badge-role-operator" :title="u.parentName ? `Under: ${u.parentName} (${u.parentEmail})` : 'Operator'">
+                    <i class="bi bi-person-badge me-1"></i> OPERATOR
+                  </span>
+                  <span v-if="u.parentName" class="text-muted text-truncate font-monospace mt-1" style="font-size: 0.68rem; max-width: 120px;" :title="`Parent User: ${u.parentName} (${u.parentEmail})`">
+                    ↳ {{ u.parentName }}
+                  </span>
+                </div>
+                <div v-else class="d-flex flex-column align-items-center">
+                  <span class="badge-role-user">
+                    USER
+                  </span>
+                  <span v-if="u.operatorsCount && u.operatorsCount > 0" class="badge bg-secondary bg-opacity-25 text-info mt-1 font-monospace" style="font-size: 0.65rem;">
+                    {{ u.operatorsCount }} operator{{ u.operatorsCount > 1 ? 's' : '' }}
+                  </span>
+                </div>
               </td>
 
               <!-- Status -->
@@ -453,6 +514,16 @@ onMounted(() => {
                   >
                     <i class="bi bi-arrow-repeat"></i>
                     <span>Renew (+30d)</span>
+                  </button>
+
+                  <!-- Change Role Button -->
+                  <button
+                    type="button"
+                    class="btn-action-role"
+                    title="Change Role (SuperAdmin, Admin, User, Operator)"
+                    @click="openRoleModal(u)"
+                  >
+                    <i class="bi bi-person-gear"></i>
                   </button>
 
                   <!-- Suspend/Activate toggle -->
@@ -653,6 +724,116 @@ onMounted(() => {
             <span v-if="isProcessingAction" class="spinner-border spinner-border-sm"></span>
             <i v-else class="bi bi-trash3-fill"></i>
             <span>Delete User Permanently</span>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 4. Change User Role Modal -->
+    <div v-if="showRoleModal && selectedUser" class="custom-modal-backdrop d-flex align-items-center justify-content-center p-3">
+      <div class="custom-modal-card">
+        <div class="modal-header-cyan p-3 d-flex align-items-center justify-content-between">
+          <div class="d-flex align-items-center gap-2.5">
+            <div class="modal-icon-wrap icon-cyan rounded">
+              <i class="bi bi-person-gear fs-5"></i>
+            </div>
+            <div>
+              <h6 class="modal-title fw-bold text-white mb-0">Change User Role</h6>
+              <span class="text-muted small">Update role &amp; account permissions</span>
+            </div>
+          </div>
+          <button type="button" class="btn-close btn-close-white" @click="showRoleModal = false"></button>
+        </div>
+
+        <div class="p-3.5">
+          <div class="user-preview-box p-2.5 rounded mb-3">
+            <div class="fw-semibold text-white">{{ selectedUser.name }}</div>
+            <div class="text-muted small font-monospace">{{ selectedUser.email }}</div>
+            <div class="text-muted small mt-1">
+              Current Role: <strong class="text-info text-uppercase">{{ selectedUser.role }}</strong>
+            </div>
+          </div>
+
+          <!-- Select Role Options -->
+          <div class="mb-3">
+            <label class="form-label text-light small fw-medium">Select New Role</label>
+            <div class="d-grid gap-2">
+              <label :class="['role-select-box p-2.5 rounded border d-flex align-items-center justify-content-between cursor-pointer', selectedRole === 'user' ? 'border-primary bg-primary bg-opacity-10' : 'border-secondary border-opacity-25 bg-dark']">
+                <div class="d-flex align-items-center gap-2.5">
+                  <input type="radio" v-model="selectedRole" value="user" class="form-check-input mt-0" />
+                  <div>
+                    <div class="text-white fw-bold small">User (Primary Account)</div>
+                    <div class="text-muted small" style="font-size: 0.74rem;">Can upload data, view reports, and create/manage operators.</div>
+                  </div>
+                </div>
+                <span class="badge bg-primary bg-opacity-25 text-primary">USER</span>
+              </label>
+
+              <label :class="['role-select-box p-2.5 rounded border d-flex align-items-center justify-content-between cursor-pointer', selectedRole === 'operator' ? 'border-info bg-info bg-opacity-10' : 'border-secondary border-opacity-25 bg-dark']">
+                <div class="d-flex align-items-center gap-2.5">
+                  <input type="radio" v-model="selectedRole" value="operator" class="form-check-input mt-0" />
+                  <div>
+                    <div class="text-white fw-bold small">Operator (Sub-Account)</div>
+                    <div class="text-muted small" style="font-size: 0.74rem;">Shares data with parent user. Cannot create IDs or manage operators.</div>
+                  </div>
+                </div>
+                <span class="badge bg-info bg-opacity-25 text-info">OPERATOR</span>
+              </label>
+
+              <label :class="['role-select-box p-2.5 rounded border d-flex align-items-center justify-content-between cursor-pointer', selectedRole === 'admin' ? 'border-warning bg-warning bg-opacity-10' : 'border-secondary border-opacity-25 bg-dark']">
+                <div class="d-flex align-items-center gap-2.5">
+                  <input type="radio" v-model="selectedRole" value="admin" class="form-check-input mt-0" />
+                  <div>
+                    <div class="text-white fw-bold small">Admin</div>
+                    <div class="text-muted small" style="font-size: 0.74rem;">Access to administrative users &amp; billing panel.</div>
+                  </div>
+                </div>
+                <span class="badge bg-warning bg-opacity-25 text-warning">ADMIN</span>
+              </label>
+
+              <label :class="['role-select-box p-2.5 rounded border d-flex align-items-center justify-content-between cursor-pointer', selectedRole === 'superadmin' ? 'border-danger bg-danger bg-opacity-10' : 'border-secondary border-opacity-25 bg-dark']">
+                <div class="d-flex align-items-center gap-2.5">
+                  <input type="radio" v-model="selectedRole" value="superadmin" class="form-check-input mt-0" />
+                  <div>
+                    <div class="text-white fw-bold small">Superadmin</div>
+                    <div class="text-muted small" style="font-size: 0.74rem;">Full master control over platform.</div>
+                  </div>
+                </div>
+                <span class="badge bg-danger bg-opacity-25 text-danger">SUPERADMIN</span>
+              </label>
+            </div>
+          </div>
+
+          <!-- If Operator role selected, choose Parent User -->
+          <div v-if="selectedRole === 'operator'" class="mb-3 p-3 rounded bg-dark border border-secondary border-opacity-25">
+            <label class="form-label text-light small fw-medium mb-1">
+              Assign Under Master User <span class="text-danger">*</span>
+            </label>
+            <select v-model="selectedParentAdminId" class="form-select form-select-sm jupiter-input">
+              <option :value="null">-- Select Parent Account Owner --</option>
+              <option v-for="p in potentialParents" :key="p.id" :value="p.id">
+                {{ p.name }} ({{ p.email }})
+              </option>
+            </select>
+            <small class="text-muted d-block mt-1">
+              The operator will share the database &amp; subscription of the selected master user.
+            </small>
+          </div>
+        </div>
+
+        <div class="p-3 modal-footer-custom d-flex align-items-center justify-content-end gap-2">
+          <button type="button" class="btn btn-secondary btn-sm" :disabled="isProcessingAction" @click="showRoleModal = false">
+            Cancel
+          </button>
+          <button
+            type="button"
+            class="btn-modal-confirm-cyan"
+            :disabled="isProcessingAction || (selectedRole === 'operator' && !selectedParentAdminId)"
+            @click="confirmChangeRole"
+          >
+            <span v-if="isProcessingAction" class="spinner-border spinner-border-sm me-1"></span>
+            <i v-else class="bi bi-check2-circle me-1"></i>
+            <span>Update Role to {{ selectedRole.toUpperCase() }}</span>
           </button>
         </div>
       </div>
@@ -1366,6 +1547,75 @@ onMounted(() => {
 
 .btn-modal-confirm-green:hover {
   background: #15803d;
+}
+
+.modal-header-cyan {
+  background: rgba(14, 165, 233, 0.08);
+  border-bottom: 1px solid rgba(14, 165, 233, 0.2);
+}
+
+.icon-cyan {
+  color: #38bdf8;
+  background: rgba(14, 165, 233, 0.15);
+  border: 1px solid rgba(14, 165, 233, 0.3);
+}
+
+.btn-modal-confirm-cyan {
+  background: #0284c7;
+  border: 1px solid #38bdf8;
+  color: #ffffff;
+  font-size: 0.82rem;
+  font-weight: 600;
+  padding: 0.35rem 0.85rem;
+  border-radius: 5px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.btn-modal-confirm-cyan:hover:not(:disabled) {
+  background: #0369a1;
+}
+
+.btn-modal-confirm-cyan:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.badge-role-operator {
+  background: rgba(14, 165, 233, 0.12) !important;
+  color: #38bdf8 !important;
+  border: 1px solid rgba(14, 165, 233, 0.35) !important;
+  font-family: monospace;
+  font-size: 0.7rem;
+  font-weight: 700;
+  padding: 0.2rem 0.55rem;
+  border-radius: 4px;
+  display: inline-block;
+}
+
+.btn-action-role {
+  background: rgba(56, 189, 248, 0.12);
+  border: 1px solid rgba(56, 189, 248, 0.35);
+  color: #38bdf8;
+  width: 28px;
+  height: 28px;
+  border-radius: 5px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.btn-action-role:hover {
+  background: rgba(56, 189, 248, 0.25);
+  color: #ffffff;
+}
+
+.role-select-box {
+  cursor: pointer;
+  transition: all 0.15s ease;
 }
 
 .table-loading-overlay {

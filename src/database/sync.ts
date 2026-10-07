@@ -7,17 +7,22 @@ import { users } from "@/modules/auth/database/models/user.js";
 import { roles } from "@/modules/auth/database/models/role.js";
 
 async function executeSingleSql(rawSql: string) {
-  const clean = rawSql.trim();
-  if (!clean) return;
-  try {
-    await db.execute(sql.raw(clean));
-  } catch (err: any) {
-    if (
-      !err.message?.includes("already exists") &&
-      !err.message?.includes("duplicate") &&
-      !err.message?.includes("multiple primary keys")
-    ) {
-      console.warn(`[DB Schema Sync Warning]:`, err.message || err);
+  const statements = rawSql
+    .split(";")
+    .map((s) => s.trim())
+    .filter(Boolean);
+
+  for (const statement of statements) {
+    try {
+      await db.execute(sql.raw(statement));
+    } catch (err: any) {
+      if (
+        !err.message?.includes("already exists") &&
+        !err.message?.includes("duplicate") &&
+        !err.message?.includes("multiple primary keys")
+      ) {
+        console.warn(`[DB Schema Sync Warning]:`, err.message || err);
+      }
     }
   }
 }
@@ -36,7 +41,7 @@ export async function syncDatabaseSchemaAndSuperAdmin() {
       );
     `);
     await executeSingleSql(
-      `INSERT INTO roles (name) VALUES ('superadmin'), ('admin'), ('user') ON CONFLICT (name) DO NOTHING;`
+      `INSERT INTO roles (name) VALUES ('superadmin'), ('admin'), ('user'), ('operator') ON CONFLICT (name) DO NOTHING;`
     );
   } catch (rErr) {
     console.warn("[DB Roles Warning]", rErr);
@@ -51,6 +56,7 @@ export async function syncDatabaseSchemaAndSuperAdmin() {
         email VARCHAR(255) NOT NULL UNIQUE,
         password TEXT NOT NULL,
         role_id INTEGER REFERENCES roles(id) ON UPDATE CASCADE ON DELETE SET NULL,
+        admin_id INTEGER REFERENCES users(id) ON UPDATE CASCADE ON DELETE CASCADE,
         status VARCHAR(50) NOT NULL DEFAULT 'pending',
         subscription_expires_at TIMESTAMP WITH TIME ZONE,
         billing_cycle_days INTEGER NOT NULL DEFAULT 30,
@@ -63,6 +69,7 @@ export async function syncDatabaseSchemaAndSuperAdmin() {
     `);
 
     await executeSingleSql(`
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS admin_id INTEGER REFERENCES users(id) ON UPDATE CASCADE ON DELETE CASCADE;
       ALTER TABLE users ADD COLUMN IF NOT EXISTS status VARCHAR(50) NOT NULL DEFAULT 'pending';
       ALTER TABLE users ADD COLUMN IF NOT EXISTS subscription_expires_at TIMESTAMP WITH TIME ZONE;
       ALTER TABLE users ADD COLUMN IF NOT EXISTS billing_cycle_days INTEGER NOT NULL DEFAULT 30;
@@ -71,6 +78,7 @@ export async function syncDatabaseSchemaAndSuperAdmin() {
       ALTER TABLE users ADD COLUMN IF NOT EXISTS email_verified_at TIMESTAMP WITH TIME ZONE;
 
       CREATE INDEX IF NOT EXISTS idx_users_role_id ON users(role_id);
+      CREATE INDEX IF NOT EXISTS idx_users_admin_id ON users(admin_id);
       CREATE INDEX IF NOT EXISTS idx_users_status ON users(status);
       CREATE INDEX IF NOT EXISTS idx_users_subscription ON users(subscription_expires_at);
     `);

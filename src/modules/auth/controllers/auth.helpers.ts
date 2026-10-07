@@ -13,6 +13,7 @@ export function sanitizeUser(user: any) {
 
   const roleName = String(user.role?.name || user.role || "").toLowerCase();
   const isSuperOrAdmin = roleName === "superadmin" || roleName === "admin";
+  const isOperator = Boolean(user.adminId) || roleName === "operator";
 
   if (isSuperOrAdmin) {
     daysRemaining = 9999;
@@ -21,16 +22,22 @@ export function sanitizeUser(user: any) {
     const diff = new Date(user.subscriptionExpiresAt).getTime() - Date.now();
     daysRemaining = Math.max(0, Math.ceil(diff / (1000 * 60 * 60 * 24)));
     isSubscriptionActive = diff > 0 && user.status === "active";
+  } else if (isOperator && user.parent?.subscriptionExpiresAt) {
+    const diff = new Date(user.parent.subscriptionExpiresAt).getTime() - Date.now();
+    daysRemaining = Math.max(0, Math.ceil(diff / (1000 * 60 * 60 * 24)));
+    isSubscriptionActive = diff > 0 && user.parent.status === "active";
   }
 
   return {
     ...sanitized,
-    role: user.role?.name || user.role || "user",
+    adminId: user.adminId ? Number(user.adminId) : null,
+    role: user.role?.name || user.role || (isOperator ? "operator" : "user"),
     roleId: user.roleId || user.role?.id,
     daysRemaining,
     isSubscriptionActive,
     isPending: user.status === "pending",
-    isSuspended: user.status === "suspended"
+    isSuspended: user.status === "suspended",
+    isOperator
   };
 }
 
@@ -207,10 +214,12 @@ export async function issueTokens(c: any, user: any, options?: { remember?: bool
   const remember = !!options?.remember;
   const refreshExpiry = remember ? jwtConfig.refreshRememberExpirySeconds : jwtConfig.refreshExpirySeconds;
   const role = user.role || null;
+  const adminId = user.adminId ? Number(user.adminId) : null;
   const accessToken = await jwt.generateToken(
     {
       id: user.id,
       email: user.email,
+      adminId,
       roleId: role?.id ?? null,
       role: role?.name ?? null,
       remember
@@ -221,6 +230,7 @@ export async function issueTokens(c: any, user: any, options?: { remember?: bool
     {
       id: user.id,
       email: user.email,
+      adminId,
       roleId: role?.id ?? null,
       role: role?.name ?? null,
       remember

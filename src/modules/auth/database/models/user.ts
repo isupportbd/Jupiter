@@ -8,6 +8,7 @@ export const users = pgTable("users", {
   email: varchar("email", { length: 255 }).notNull().unique(),
   password: text("password").notNull(),
   roleId: integer("role_id").references(() => roles.id, { onUpdate: "cascade", onDelete: "set null" }),
+  adminId: integer("admin_id").references((): any => users.id, { onUpdate: "cascade", onDelete: "cascade" }),
   status: varchar("status", { length: 50 }).default("pending").notNull(), // 'pending' | 'active' | 'suspended' | 'rejected'
   subscriptionExpiresAt: timestamp("subscription_expires_at", { withTimezone: true }),
   billingCycleDays: integer("billing_cycle_days").default(30).notNull(),
@@ -54,9 +55,17 @@ export const otpVerifications = pgTable("otp_verifications", {
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull()
 });
 
-export const usersRelations = relations(users, ({ one }) => ({
+export const usersRelations = relations(users, ({ one, many }) => ({
   role: one(roles, {
     fields: [users.roleId],
     references: [roles.id]
+  }),
+  parent: one(users, {
+    fields: [users.adminId],
+    references: [users.id],
+    relationName: "operators"
+  }),
+  operators: many(users, {
+    relationName: "operators"
   })
 }));

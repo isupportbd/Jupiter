@@ -28,7 +28,7 @@ export const listUsers: Handler = async (c: any) => {
     const statusFilter = (c.req.query("status") || "").trim().toLowerCase();
 
     const allUsers = await db.query.users.findMany({
-      with: { role: true },
+      with: { role: true, parent: true, operators: true },
       orderBy: [desc(users.createdAt)]
     });
 
@@ -53,6 +53,7 @@ export const listUsers: Handler = async (c: any) => {
     const formattedUsers = allUsers.map((u: any) => {
       const roleName = String(u.role?.name || "user").toLowerCase();
       const isSuperOrAdmin = roleName === "superadmin" || roleName === "admin";
+      const isOperator = Boolean(u.adminId) || roleName === "operator";
 
       let daysRemaining = 0;
       let isExpired = false;
@@ -63,6 +64,10 @@ export const listUsers: Handler = async (c: any) => {
         const diff = new Date(u.subscriptionExpiresAt).getTime() - now;
         daysRemaining = Math.max(0, Math.ceil(diff / (1000 * 60 * 60 * 24)));
         isExpired = diff <= 0;
+      } else if (isOperator && u.parent?.subscriptionExpiresAt) {
+        const diff = new Date(u.parent.subscriptionExpiresAt).getTime() - now;
+        daysRemaining = Math.max(0, Math.ceil(diff / (1000 * 60 * 60 * 24)));
+        isExpired = diff <= 0;
       } else if (u.status === "pending") {
         daysRemaining = 0;
       }
@@ -71,18 +76,22 @@ export const listUsers: Handler = async (c: any) => {
         id: u.id,
         name: u.name,
         email: u.email,
-        role: u.role?.name || "user",
+        role: u.role?.name || (isOperator ? "operator" : "user"),
         roleId: u.roleId,
+        adminId: u.adminId ? Number(u.adminId) : null,
+        parentName: u.parent?.name || null,
+        parentEmail: u.parent?.email || null,
+        operatorsCount: Array.isArray(u.operators) ? u.operators.length : 0,
         status: u.status || "pending",
         isExpired,
         daysRemaining,
         billingCycleDays: u.billingCycleDays || 30,
-        subscriptionExpiresAt: u.subscriptionExpiresAt,
+        subscriptionExpiresAt: u.subscriptionExpiresAt || u.parent?.subscriptionExpiresAt || null,
         approvedAt: u.approvedAt,
         approvedBy: u.approvedBy,
         emailVerifiedAt: u.emailVerifiedAt,
         createdAt: u.createdAt,
-        totalRecords: countMap.get(u.id) || 0
+        totalRecords: countMap.get(u.adminId ? Number(u.adminId) : u.id) || 0
       };
     });
 
@@ -327,3 +336,77 @@ export const deleteUser: Handler = async (c: any) => {
     return c.json({ message: error.message }, HttpStatusCodes.INTERNAL_SERVER_ERROR);
   }
 };
+
+/**
+ * 6. Change User Role (superadmin, admin, user, operator)
+ * Route: POST /api/admin/users/:id/role
+ */
+export const updateUserRole: Handler = async (c: any) => {
+  try {
+    const auth = c.get("auth");
+    if (!isUserAdmin(auth)) {
+      return c.json({ message: "Access denied. Administrator privileges required." }, HttpStatusCodes.FORBIDDEN);
+    }
+
+    const userId = Number(c.req.param("id"));
+    const body = await c.req.json();
+    const roleName = String(body.role || "").toLowerCase().trim();
+    const parentAdminId = body.adminId !== undefined ? (body.adminId ? Number(body.adminId) : null) : undefined;
+
+    if (!["superadmin", "admin", "user", "operator"].includes(roleName)) {
+      return c.json({ message: "Invalid role. Supported roles: superadmin, admin, user, operator" }, HttpStatusCodes.BAD_REQUEST);
+    }
+
+    const targetUser = await db.query.users.findFirst({
+      where: eq(users.id, userId)
+    });
+
+    if (!targetUser) {
+      return c.json({ message: "User not found" }, HttpStatusCodes.NOT_FOUND);
+    }
+
+    // Ensure role exists in roles table
+    let roleRecord = await db.query.roles.findFirst({
+      where: eq(roles.name, roleName)
+    });
+    if (!roleRecord) {
+      try {
+        const [created] = await db.insert(roles).values({ name: roleName }).returning();
+        roleRecord = created;
+      } catch (_) {
+        roleRecord = await db.query.roles.findFirst({ where: eq(roles.name, roleName) });
+      }
+    }
+
+    const updates: any = {
+      roleId: roleRecord?.id || null,
+      updatedAt: new Date()
+    };
+
+    if (roleName === "operator") {
+      if (parentAdminId !== undefined) {
+        updates.adminId = parentAdminId;
+      }
+    } else {
+      // If changing from operator to user/admin/superadmin, clear adminId
+      updates.adminId = null;
+    }
+
+    await db.update(users).set(updates).where(eq(users.id, userId));
+
+    return c.json({
+      success: true,
+      message: `Role for "${targetUser.name}" successfully changed to "${roleName}".`,
+      data: {
+        userId,
+        role: roleName,
+        roleId: roleRecord?.id,
+        adminId: updates.adminId
+      }
+    });
+  } catch (error: any) {
+    console.error("Update user role error:", error);
+    return c.json({ message: error.message }, HttpStatusCodes.INTERNAL_SERVER_ERROR);
+  }
+};
+

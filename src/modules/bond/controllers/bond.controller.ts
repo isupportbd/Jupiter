@@ -12,7 +12,10 @@ function getAuthContext(c: any) {
   const userId = auth?.id ? Number(auth.id) : null;
   const role = String(auth?.role || "").toLowerCase();
   const isSuperOrAdmin = role === "superadmin" || role === "admin" || auth?.roleId === 1;
-  return { userId, isSuperOrAdmin, auth };
+  const adminId = auth?.adminId !== undefined && auth?.adminId !== null ? Number(auth.adminId) : null;
+  const isOperator = Boolean(adminId) || role === "operator";
+  const tenantId = adminId || userId;
+  return { userId, isSuperOrAdmin, isOperator, adminId, tenantId, auth };
 }
 
 function parseFilterDate(str: string, endOfDay = false): Date | null {
@@ -57,13 +60,13 @@ function parseRecordNumeric(val: any): string {
  */
 export const processUploadChunk: Handler = async (c: any) => {
   try {
-    const { userId, isSuperOrAdmin } = getAuthContext(c);
-    if (!userId) {
+    const { userId, tenantId, isSuperOrAdmin } = getAuthContext(c);
+    if (!userId || !tenantId) {
       return c.json({ message: "Unauthorized. Please log in first." }, HttpStatusCodes.UNAUTHORIZED);
     }
 
     if (!isSuperOrAdmin) {
-      const user = await db.query.users.findFirst({ where: eq(users.id, userId) });
+      const user = await db.query.users.findFirst({ where: eq(users.id, tenantId) });
       if (!user?.subscriptionExpiresAt || new Date(user.subscriptionExpiresAt).getTime() <= Date.now()) {
         return c.json(
           { message: "Your subscription has expired. File upload is disabled. Please contact the Administrator to renew." },
@@ -82,7 +85,7 @@ export const processUploadChunk: Handler = async (c: any) => {
     }
 
     const rowsToInsert = records.map((r) => ({
-      userId,
+      userId: tenantId,
       bankName: String(r.bankName || "Unknown Bank").trim(),
       branchName: r.branchName ? String(r.branchName).trim() : null,
       adsCode: r.adsCode ? String(r.adsCode).trim() : null,
@@ -144,15 +147,15 @@ export const processUploadChunk: Handler = async (c: any) => {
  */
 export const getSummary: Handler = async (c: any) => {
   try {
-    const { userId } = getAuthContext(c);
-    if (!userId) {
+    const { userId, tenantId } = getAuthContext(c);
+    if (!userId || !tenantId) {
       return c.json({ message: "Unauthorized" }, HttpStatusCodes.UNAUTHORIZED);
     }
 
     const countResult = await db
       .select({ count: sql`count(*)` })
       .from(bondRecords)
-      .where(eq(bondRecords.userId, userId));
+      .where(eq(bondRecords.userId, tenantId));
     const totalRecords = Number(countResult[0]?.count || 0);
 
     return c.json({
@@ -210,8 +213,8 @@ export const getDatabaseStorageSize: Handler = async (c: any) => {
  */
 export const getLocalLcReport: Handler = async (c: any) => {
   try {
-    const { userId } = getAuthContext(c);
-    if (!userId) {
+    const { userId, tenantId } = getAuthContext(c);
+    if (!userId || !tenantId) {
       return c.json({ message: "Unauthorized" }, HttpStatusCodes.UNAUTHORIZED);
     }
 
@@ -240,8 +243,8 @@ export const getLocalLcReport: Handler = async (c: any) => {
         .filter(Boolean);
     }
 
-    // Strictly enforce multi-tenant per-user data isolation
-    const conditions: any[] = [eq(bondRecords.userId, userId)];
+    // Strictly enforce multi-tenant per-account data isolation
+    const conditions: any[] = [eq(bondRecords.userId, tenantId)];
 
     // Global text search
     if (search) {
@@ -375,14 +378,14 @@ export const getLocalLcReport: Handler = async (c: any) => {
  */
 export const getBeneficiaries: Handler = async (c: any) => {
   try {
-    const { userId } = getAuthContext(c);
-    if (!userId) {
+    const { userId, tenantId } = getAuthContext(c);
+    if (!userId || !tenantId) {
       return c.json({ message: "Unauthorized" }, HttpStatusCodes.UNAUTHORIZED);
     }
 
     const search = c.req.query("search")?.trim();
     const whereConditions: any[] = [
-      eq(bondRecords.userId, userId),
+      eq(bondRecords.userId, tenantId),
       sql`beneficiary_name is not null and length(trim(beneficiary_name)) > 1 and trim(beneficiary_name) !~ '^[.\\s,;:-]+$'`
     ];
 
@@ -425,8 +428,8 @@ export const getBeneficiaries: Handler = async (c: any) => {
  */
 export const getMonthwiseSummary: Handler = async (c: any) => {
   try {
-    const { userId } = getAuthContext(c);
-    if (!userId) {
+    const { userId, tenantId } = getAuthContext(c);
+    if (!userId || !tenantId) {
       return c.json({ message: "Unauthorized" }, HttpStatusCodes.UNAUTHORIZED);
     }
 
@@ -435,7 +438,7 @@ export const getMonthwiseSummary: Handler = async (c: any) => {
     const monthTo = (c.req.query("monthTo") || "").trim();
 
     const conditions: any[] = [
-      eq(bondRecords.userId, userId),
+      eq(bondRecords.userId, tenantId),
       sql`COALESCE(entry_date, lc_date) IS NOT NULL`
     ];
 
@@ -557,8 +560,8 @@ export const getMonthwiseSummary: Handler = async (c: any) => {
  */
 export const deleteMonthwiseRecords: Handler = async (c: any) => {
   try {
-    const { userId } = getAuthContext(c);
-    if (!userId) {
+    const { userId, tenantId } = getAuthContext(c);
+    if (!userId || !tenantId) {
       return c.json({ message: "Unauthorized" }, HttpStatusCodes.UNAUTHORIZED);
     }
 
@@ -573,7 +576,7 @@ export const deleteMonthwiseRecords: Handler = async (c: any) => {
       (m) => sql`TO_CHAR(COALESCE(${bondRecords.entryDate}, ${bondRecords.lcDate}), 'YYYY-MM') = ${m}`
     );
 
-    const deleteCondition = and(eq(bondRecords.userId, userId), or(...monthConditions));
+    const deleteCondition = and(eq(bondRecords.userId, tenantId), or(...monthConditions));
 
     await db.delete(bondRecords).where(deleteCondition);
 

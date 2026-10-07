@@ -2,6 +2,7 @@
 import { computed, ref } from "vue";
 import { useRouter } from "vue-router";
 import { useAuthStore } from "@/stores/auth";
+import OperatorManagementModal from "@/components/OperatorManagementModal.vue";
 import axios from "axios";
 import * as XLSX from "xlsx";
 
@@ -14,6 +15,21 @@ const isSubscriptionExpired = computed(() => {
   if (isAdmin) return false;
   return Number((authStore.user as any)?.daysRemaining || 0) <= 0;
 });
+
+const isOperator = computed(() => {
+  const user = authStore.user as any;
+  const roleName = String(user?.role?.name || user?.role || "").toLowerCase();
+  return Boolean(user?.adminId) || roleName === "operator";
+});
+
+const canManageOperators = computed(() => {
+  const user = authStore.user as any;
+  const roleName = String(user?.role?.name || user?.role || "").toLowerCase();
+  const isAdmin = roleName === "superadmin" || roleName === "admin";
+  return !isOperator.value && !isAdmin;
+});
+
+const showOperatorModal = ref(false);
 
 const selectedFile = ref<File | null>(null);
 const fileName = ref("");
@@ -558,6 +574,17 @@ const handleGoToReports = () => {
         <i class="bi bi-file-earmark-bar-graph"></i>
         <span>Go to Reports</span>
       </button>
+
+      <!-- Settings / Manage Operators Button (Only for Primary Account Owners) -->
+      <button
+        v-if="canManageOperators"
+        type="button"
+        class="btn-sketch-settings"
+        title="Operator Settings &amp; Management"
+        @click="showOperatorModal = true"
+      >
+        <i class="bi bi-gear-fill"></i>
+      </button>
     </div>
 
     <!-- Floating Toast Notifications (Top Right) -->
@@ -724,6 +751,12 @@ const handleGoToReports = () => {
         </div>
       </div>
     </div>
+
+    <!-- Operator Management Modal -->
+    <OperatorManagementModal
+      :show="showOperatorModal"
+      @close="showOperatorModal = false"
+    />
   </div>
 </template>
 
@@ -852,6 +885,32 @@ const handleGoToReports = () => {
   background: #334155;
   border-color: #38bdf8;
   color: #38bdf8;
+}
+
+/* Settings / Operator Button */
+.btn-sketch-settings {
+  background: #1e293b;
+  border: 1px solid #475569;
+  color: #f8fafc;
+  font-size: 1.15rem;
+  height: 38px;
+  width: 38px;
+  padding: 0;
+  border-radius: 4px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  flex-shrink: 0;
+}
+
+.btn-sketch-settings:hover {
+  background: #334155;
+  border-color: #38bdf8;
+  color: #38bdf8;
+  transform: rotate(45deg);
+  box-shadow: 0 0 10px rgba(56, 189, 248, 0.25);
 }
 
 /* Modal / Popup Styles (Deep Navy / Bluish Dark Theme) */

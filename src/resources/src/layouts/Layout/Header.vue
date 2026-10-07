@@ -168,8 +168,8 @@ const handleLogout = async () => {
                 {{ authStore.user.email }}
               </div>
               <div class="d-flex align-items-center gap-2 mt-2">
-                <span :class="['user-role-badge', isAdmin ? 'role-admin' : 'role-user']">
-                  {{ (authStore.user as any)?.role?.name || (authStore.user as any)?.role || (isAdmin ? 'ADMIN' : 'USER') }}
+                <span :class="['user-role-badge', isAdmin ? 'role-admin' : (authStore.user as any)?.adminId || (authStore.user as any)?.role === 'operator' ? 'role-operator' : 'role-user']">
+                  {{ (authStore.user as any)?.role?.name || (authStore.user as any)?.role || (isAdmin ? 'ADMIN' : (authStore.user as any)?.adminId ? 'OPERATOR' : 'USER') }}
                 </span>
               </div>
             </div>
@@ -384,6 +384,12 @@ const handleLogout = async () => {
 .user-role-badge.role-user {
   background: rgba(56, 189, 248, 0.12);
   border: 1px solid rgba(56, 189, 248, 0.35);
+  color: #38bdf8;
+}
+
+.user-role-badge.role-operator {
+  background: rgba(14, 165, 233, 0.15);
+  border: 1px solid rgba(14, 165, 233, 0.4);
   color: #38bdf8;
 }
 

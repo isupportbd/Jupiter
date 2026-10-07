@@ -33,13 +33,18 @@ export async function subscriptionMiddleware(c: Context, next: Next) {
       where: eq(users.id, currentUserId)
     });
 
-    if (!currentUser) {
+    const targetUserId = currentUser.adminId ? Number(currentUser.adminId) : currentUserId;
+    const effectiveUser = currentUser.adminId
+      ? await db.query.users.findFirst({ where: eq(users.id, targetUserId) })
+      : currentUser;
+
+    if (!effectiveUser) {
       return await next();
     }
 
     const isSubscriptionActive = !!(
-      currentUser.subscriptionExpiresAt &&
-      new Date(currentUser.subscriptionExpiresAt).getTime() > Date.now()
+      effectiveUser.subscriptionExpiresAt &&
+      new Date(effectiveUser.subscriptionExpiresAt).getTime() > Date.now()
     );
 
     if (!isSubscriptionActive) {
@@ -47,7 +52,7 @@ export async function subscriptionMiddleware(c: Context, next: Next) {
         {
           success: false,
           isSubscriptionExpired: true,
-          message: "Your subscription has expired. Please contact the Administrator to renew."
+          message: "Your account subscription has expired. Please contact the Administrator to renew."
         },
         403
       );

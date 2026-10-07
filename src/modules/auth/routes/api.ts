@@ -182,8 +182,16 @@ import {
   deleteUser,
   listUsers,
   renewUserBilling,
+  updateUserRole,
   updateUserStatus
 } from "@/modules/auth/controllers/admin-user.controller.js";
+import {
+  createOperator,
+  deleteOperator,
+  listOperators,
+  toggleOperatorStatus,
+  updateOperator
+} from "@/modules/auth/controllers/operator.controller.js";
 
 const publicRoute = createRouter()
   .group(loginLimiter)
@@ -203,11 +211,19 @@ const protectedRoute = createRouter()
   .api(logoutRoute, logout)
   .api(logoutAllDevicesRoute, logoutAllDevices);
 
+// Operator Management Routes (For Primary Account Owners)
+protectedRoute.get("/operators", listOperators);
+protectedRoute.post("/operators", createOperator);
+protectedRoute.put("/operators/:id", updateOperator);
+protectedRoute.patch("/operators/:id/status", toggleOperatorStatus);
+protectedRoute.delete("/operators/:id", deleteOperator);
+
 // Admin User Management Routes (Protected by authMiddleware + Admin role check)
 protectedRoute.get("/admin/users", listUsers);
 protectedRoute.post("/admin/users/:id/approve", approveUser);
 protectedRoute.post("/admin/users/:id/renew", renewUserBilling);
 protectedRoute.post("/admin/users/:id/status", updateUserStatus);
+protectedRoute.post("/admin/users/:id/role", updateUserRole);
 protectedRoute.delete("/admin/users/:id", deleteUser);
 
 export default createRouter().route("/", publicRoute).route("/", protectedRoute);
