@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from "vue";
+import { computed, onMounted, ref, watch } from "vue";
 import axios from "axios";
 
 const props = defineProps<{
@@ -42,7 +42,7 @@ const isResettingPassword = ref(false);
 const showDeleteConfirmModal = ref(false);
 const operatorToDelete = ref<OperatorItem | null>(null);
 
-// Toast
+// Toast notification
 const toastMessage = ref<string | null>(null);
 const toastType = ref<"success" | "danger">("success");
 
@@ -200,6 +200,17 @@ const confirmDelete = async () => {
   }
 };
 
+watch(
+  () => props.show,
+  (val) => {
+    if (val) {
+      fetchOperators();
+    } else {
+      resetForm();
+    }
+  }
+);
+
 onMounted(() => {
   if (props.show) {
     fetchOperators();
@@ -208,41 +219,41 @@ onMounted(() => {
 </script>
 
 <template>
-  <div v-if="show" class="operator-modal-backdrop d-flex align-items-center justify-content-center">
-    <div class="operator-modal-dialog">
-      <div class="operator-modal-content">
+  <div v-if="show" class="jupiter-modal-backdrop d-flex align-items-center justify-content-center p-3">
+    <div class="jupiter-modal-dialog">
+      <div class="jupiter-modal-content shadow-lg">
+        
         <!-- Modal Header -->
-        <div class="operator-modal-header d-flex align-items-center justify-content-between px-4 py-3 border-bottom border-secondary border-opacity-25">
-          <div class="d-flex align-items-center gap-2.5">
-            <div class="modal-icon-badge">
-              <i class="bi bi-people-fill text-primary"></i>
+        <div class="jupiter-modal-header d-flex align-items-center justify-content-between px-4 py-3">
+          <div class="d-flex align-items-center">
+            <div class="modal-badge-icon me-3">
+              <i class="bi bi-people-fill"></i>
             </div>
             <div>
-              <h5 class="modal-title text-white fw-bold mb-0 fs-5">Operator Settings</h5>
-              <p class="text-muted small mb-0" style="font-size: 0.78rem;">
-                Manage operators who have shared data access under your account
-              </p>
+              <h6 class="modal-title-text mb-0">Operator Management</h6>
+              <span class="modal-subtitle-text">
+                Manage accounts that have shared access to your bond analysis workspace
+              </span>
             </div>
           </div>
           <button
             type="button"
-            class="btn-close-modal"
+            class="btn-close btn-close-white"
             title="Close"
             @click="emit('close')"
-          >
-            <i class="bi bi-x-lg"></i>
-          </button>
+          ></button>
         </div>
 
-        <!-- Modal Body -->
-        <div class="operator-modal-body p-4">
-          <!-- Notification Toast inside modal -->
+        <!-- Modal Scrollable Body -->
+        <div class="jupiter-modal-body px-4 py-3">
+          
+          <!-- Inner Notification Toast -->
           <div
             v-if="toastMessage"
-            :class="['alert', toastType === 'success' ? 'alert-success bg-success bg-opacity-10 text-success border-success' : 'alert-danger bg-danger bg-opacity-10 text-danger border-danger', 'py-2 px-3 small rounded-3 d-flex align-items-center justify-content-between mb-3']"
+            :class="['alert', toastType === 'success' ? 'alert-success bg-success bg-opacity-10 text-success border-success' : 'alert-danger bg-danger bg-opacity-10 text-danger border-danger', 'py-2 px-3 small rounded d-flex align-items-center justify-content-between mb-3']"
           >
-            <div class="d-flex align-items-center gap-2">
-              <i :class="toastType === 'success' ? 'bi bi-check-circle-fill' : 'bi bi-exclamation-triangle-fill'"></i>
+            <div class="d-flex align-items-center">
+              <i :class="[toastType === 'success' ? 'bi bi-check-circle-fill' : 'bi bi-exclamation-triangle-fill', 'me-2']"></i>
               <span>{{ toastMessage }}</span>
             </div>
             <button type="button" class="btn-close btn-close-white small" style="transform: scale(0.8);" @click="toastMessage = null"></button>
@@ -251,35 +262,35 @@ onMounted(() => {
           <!-- Top Toolbar: Stats & Add Button -->
           <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-3">
             <div class="d-flex align-items-center gap-2">
-              <span class="badge bg-dark border border-secondary text-white px-2.5 py-1.5 rounded-pill font-monospace" style="font-size: 0.75rem;">
-                Total: <strong>{{ operators.length }}</strong>
+              <span class="badge-stat">
+                Total: <strong class="text-white">{{ operators.length }}</strong>
               </span>
-              <span class="badge bg-success bg-opacity-10 border border-success border-opacity-25 text-success px-2.5 py-1.5 rounded-pill font-monospace" style="font-size: 0.75rem;">
+              <span class="badge-stat badge-stat-active">
                 Active: <strong>{{ operators.filter(o => o.status === 'active').length }}</strong>
               </span>
             </div>
 
             <button
               type="button"
-              :class="['btn btn-sm d-inline-flex align-items-center gap-2 px-3 py-1.5 rounded-3 fw-semibold', showAddForm ? 'btn-outline-secondary' : 'btn-primary']"
+              :class="['btn btn-sm d-inline-flex align-items-center gap-2 px-3 py-1.5 rounded fw-medium', showAddForm ? 'btn-outline-secondary' : 'btn-jupiter-primary']"
               @click="showAddForm ? resetForm() : (showAddForm = true)"
             >
-              <i :class="showAddForm ? 'bi bi-x-circle' : 'bi bi-person-plus-fill'"></i>
+              <i :class="showAddForm ? 'bi bi-x-lg' : 'bi bi-person-plus-fill'"></i>
               <span>{{ showAddForm ? 'Cancel' : 'Add New Operator' }}</span>
             </button>
           </div>
 
-          <!-- Form Area (Add / Edit) -->
-          <div v-if="showAddForm" class="operator-form-card p-3 mb-3 rounded-3 border border-primary border-opacity-25">
-            <div class="fw-bold text-white fs-6 mb-2 d-flex align-items-center gap-2">
-              <i class="bi bi-person-badge text-primary"></i>
+          <!-- Add / Edit Operator Form Card -->
+          <div v-if="showAddForm" class="operator-form-card p-3 mb-3 rounded">
+            <div class="form-card-title mb-3 d-flex align-items-center">
+              <i class="bi bi-person-badge text-info me-2"></i>
               <span>{{ editingOperator ? `Edit Operator: ${editingOperator.name}` : 'Create New Operator' }}</span>
             </div>
 
             <form @submit.prevent="handleSaveOperator" class="row g-3">
               <!-- Name -->
               <div class="col-md-4">
-                <label class="form-label text-muted small mb-1">Full Name <span class="text-danger">*</span></label>
+                <label class="form-label field-label mb-1">Full Name <span class="text-danger">*</span></label>
                 <input
                   v-model="formName"
                   type="text"
@@ -291,7 +302,7 @@ onMounted(() => {
 
               <!-- Email -->
               <div class="col-md-4">
-                <label class="form-label text-muted small mb-1">Email Address <span class="text-danger">*</span></label>
+                <label class="form-label field-label mb-1">Email Address <span class="text-danger">*</span></label>
                 <input
                   v-model="formEmail"
                   type="email"
@@ -304,7 +315,7 @@ onMounted(() => {
 
               <!-- Password -->
               <div class="col-md-4">
-                <label class="form-label text-muted small mb-1">
+                <label class="form-label field-label mb-1">
                   {{ editingOperator ? 'New Password (optional)' : 'Password' }} <span v-if="!editingOperator" class="text-danger">*</span>
                 </label>
                 <div class="position-relative">
@@ -325,41 +336,42 @@ onMounted(() => {
                 </div>
               </div>
 
-              <!-- Form Buttons -->
-              <div class="col-12 d-flex justify-content-end gap-2 mt-2">
+              <!-- Action Buttons -->
+              <div class="col-12 d-flex justify-content-end gap-2 mt-3 pt-2 border-top border-secondary border-opacity-10">
                 <button type="button" class="btn btn-sm btn-outline-secondary px-3" @click="resetForm">
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  class="btn btn-sm btn-primary px-3 fw-semibold d-inline-flex align-items-center gap-1.5"
+                  class="btn btn-sm btn-jupiter-primary px-3 fw-medium d-inline-flex align-items-center gap-2"
                   :disabled="isSaving"
                 >
                   <span v-if="isSaving" class="spinner-border spinner-border-sm"></span>
+                  <i v-else :class="editingOperator ? 'bi bi-check-lg' : 'bi bi-plus-lg'"></i>
                   <span>{{ editingOperator ? 'Save Changes' : 'Create Operator' }}</span>
                 </button>
               </div>
             </form>
           </div>
 
-          <!-- Operators Table -->
-          <div class="table-responsive operator-table-wrapper rounded-3 border border-secondary border-opacity-25">
-            <table class="table table-dark table-hover mb-0 align-middle">
+          <!-- Operators Table Container -->
+          <div class="jupiter-table-container">
+            <table class="table jupiter-table mb-0 align-middle">
               <thead>
-                <tr class="table-header-row text-muted small">
-                  <th style="width: 50px;" class="ps-3">#</th>
-                  <th>Operator Name &amp; Email</th>
-                  <th style="width: 110px;">Role</th>
-                  <th style="width: 110px;">Status</th>
-                  <th style="width: 130px;">Created Date</th>
-                  <th style="width: 140px;" class="text-end pe-3">Actions</th>
+                <tr>
+                  <th style="width: 45px;" class="ps-3 text-center">#</th>
+                  <th>OPERATOR NAME &amp; EMAIL</th>
+                  <th style="width: 110px;">ROLE</th>
+                  <th style="width: 110px;">STATUS</th>
+                  <th style="width: 130px;">CREATED DATE</th>
+                  <th style="width: 130px;" class="text-end pe-3">ACTIONS</th>
                 </tr>
               </thead>
               <tbody>
                 <!-- Loading State -->
                 <tr v-if="isLoading">
                   <td colspan="6" class="text-center py-4 text-muted">
-                    <span class="spinner-border spinner-border-sm me-2 text-primary"></span>
+                    <span class="spinner-border spinner-border-sm me-2 text-info"></span>
                     Loading operators...
                   </td>
                 </tr>
@@ -367,48 +379,49 @@ onMounted(() => {
                 <!-- Empty State -->
                 <tr v-else-if="operators.length === 0">
                   <td colspan="6" class="text-center py-5">
-                    <div class="d-flex flex-column align-items-center justify-content-center text-muted">
-                      <div class="empty-icon-circle mb-2">
-                        <i class="bi bi-people fs-3"></i>
+                    <div class="d-flex flex-column align-items-center justify-content-center py-2">
+                      <div class="empty-icon-circle mb-3">
+                        <i class="bi bi-people fs-4 text-muted"></i>
                       </div>
-                      <div class="fw-semibold text-white mb-1">No Operators Added Yet</div>
-                      <p class="small text-muted mb-3" style="max-width: 320px;">
+                      <div class="fw-medium text-white mb-1">No Operators Added Yet</div>
+                      <p class="small text-muted mb-3" style="max-width: 320px; font-size: 0.78rem;">
                         Add staff or data entry operators to share your account's bond analysis workspace.
                       </p>
                       <button
                         type="button"
-                        class="btn btn-sm btn-primary px-3 rounded-pill"
+                        class="btn btn-sm btn-jupiter-primary px-3 rounded d-inline-flex align-items-center gap-2"
                         @click="showAddForm = true"
                       >
-                        <i class="bi bi-plus-lg me-1"></i> Add First Operator
+                        <i class="bi bi-plus-lg"></i>
+                        <span>Add First Operator</span>
                       </button>
                     </div>
                   </td>
                 </tr>
 
-                <!-- Operator Row -->
+                <!-- Operators List Rows -->
                 <tr v-for="(op, idx) in operators" :key="op.id">
-                  <td class="ps-3 text-muted font-monospace small">{{ idx + 1 }}</td>
+                  <td class="ps-3 text-center cell-num">{{ idx + 1 }}</td>
                   <td>
-                    <div class="d-flex align-items-center gap-2.5">
-                      <div class="operator-avatar">
+                    <div class="d-flex align-items-center">
+                      <div class="operator-avatar me-2.5">
                         {{ op.name ? op.name.charAt(0).toUpperCase() : 'O' }}
                       </div>
                       <div>
-                        <div class="text-white fw-bold small">{{ op.name }}</div>
-                        <div class="text-muted font-monospace" style="font-size: 0.75rem;">{{ op.email }}</div>
+                        <div class="cell-main">{{ op.name }}</div>
+                        <div class="cell-muted font-monospace" style="font-size: 0.74rem;">{{ op.email }}</div>
                       </div>
                     </div>
                   </td>
                   <td>
-                    <span class="badge bg-info bg-opacity-10 text-info border border-info border-opacity-25 px-2 py-1 rounded-pill" style="font-size: 0.72rem;">
+                    <span class="badge-role-op">
                       <i class="bi bi-person-badge me-1"></i> Operator
                     </span>
                   </td>
                   <td>
                     <button
                       type="button"
-                      :class="['btn btn-xs status-toggle-btn d-inline-flex align-items-center gap-1.5 px-2 py-1 rounded-pill font-monospace', op.status === 'active' ? 'status-btn-active' : 'status-btn-suspended']"
+                      :class="['btn btn-xs status-toggle-btn d-inline-flex align-items-center gap-1.5 px-2 py-0.5 rounded font-monospace', op.status === 'active' ? 'status-btn-active' : 'status-btn-suspended']"
                       :title="`Click to ${op.status === 'active' ? 'suspend' : 'activate'}`"
                       @click="handleToggleStatus(op)"
                     >
@@ -416,7 +429,7 @@ onMounted(() => {
                       <span>{{ op.status === 'active' ? 'Active' : 'Suspended' }}</span>
                     </button>
                   </td>
-                  <td class="text-muted small font-monospace">
+                  <td class="cell-muted font-monospace" style="font-size: 0.76rem;">
                     {{ op.createdAt ? new Date(op.createdAt).toLocaleDateString() : '-' }}
                   </td>
                   <td class="text-end pe-3">
@@ -424,7 +437,7 @@ onMounted(() => {
                       <!-- Edit Info -->
                       <button
                         type="button"
-                        class="btn btn-icon-action btn-outline-light"
+                        class="btn-icon-action btn-action-edit"
                         title="Edit Operator"
                         @click="startEdit(op)"
                       >
@@ -434,7 +447,7 @@ onMounted(() => {
                       <!-- Reset Password -->
                       <button
                         type="button"
-                        class="btn btn-icon-action btn-outline-warning"
+                        class="btn-icon-action btn-action-key"
                         title="Reset Password"
                         @click="openPasswordReset(op)"
                       >
@@ -444,7 +457,7 @@ onMounted(() => {
                       <!-- Delete Operator -->
                       <button
                         type="button"
-                        class="btn btn-icon-action btn-outline-danger"
+                        class="btn-icon-action btn-action-delete"
                         title="Delete Operator"
                         @click="openDeleteConfirm(op)"
                       >
@@ -458,30 +471,32 @@ onMounted(() => {
           </div>
         </div>
 
-        <!-- Modal Footer -->
-        <div class="operator-modal-footer px-4 py-3 border-top border-secondary border-opacity-25 d-flex align-items-center justify-content-between">
-          <div class="text-muted small" style="font-size: 0.75rem;">
-            <i class="bi bi-shield-check text-success me-1"></i> All operators share your database &amp; reports seamlessly.
+        <!-- Modal Footer (Fixed at Bottom) -->
+        <div class="jupiter-modal-footer px-4 py-2.5 d-flex align-items-center justify-content-between">
+          <div class="text-muted small d-flex align-items-center" style="font-size: 0.76rem;">
+            <i class="bi bi-shield-check text-success me-1.5"></i>
+            <span>All operators share your uploaded files, reports and database seamlessly.</span>
           </div>
           <button type="button" class="btn btn-secondary btn-sm px-4" @click="emit('close')">
-            Done
+            Close
           </button>
         </div>
       </div>
     </div>
 
     <!-- Password Reset Sub-Modal -->
-    <div v-if="showPasswordResetModal" class="sub-modal-backdrop d-flex align-items-center justify-content-center">
-      <div class="sub-modal-card p-4 rounded-3 border border-warning shadow-lg">
-        <h6 class="text-white fw-bold mb-1 d-flex align-items-center gap-2">
-          <i class="bi bi-key-fill text-warning"></i> Reset Operator Password
-        </h6>
-        <p class="text-muted small mb-3">
+    <div v-if="showPasswordResetModal" class="sub-modal-backdrop d-flex align-items-center justify-content-center p-3">
+      <div class="sub-modal-card p-4 rounded shadow-lg">
+        <div class="d-flex align-items-center mb-2">
+          <i class="bi bi-key-fill text-warning me-2 fs-5"></i>
+          <h6 class="text-white fw-bold mb-0">Reset Operator Password</h6>
+        </div>
+        <p class="text-muted small mb-3" style="font-size: 0.78rem;">
           Set a new login password for <strong>{{ targetOperator?.name }}</strong> ({{ targetOperator?.email }}).
         </p>
 
         <div class="mb-3">
-          <label class="form-label text-muted small mb-1">New Password</label>
+          <label class="form-label field-label mb-1">New Password</label>
           <input
             v-model="newPassword"
             type="text"
@@ -497,7 +512,7 @@ onMounted(() => {
           </button>
           <button
             type="button"
-            class="btn btn-sm btn-warning px-3 fw-semibold d-inline-flex align-items-center gap-1.5"
+            class="btn btn-sm btn-warning px-3 fw-medium d-inline-flex align-items-center gap-1.5"
             :disabled="isResettingPassword || !newPassword || newPassword.length < 6"
             @click="confirmPasswordReset"
           >
@@ -509,12 +524,13 @@ onMounted(() => {
     </div>
 
     <!-- Delete Confirmation Sub-Modal -->
-    <div v-if="showDeleteConfirmModal" class="sub-modal-backdrop d-flex align-items-center justify-content-center">
-      <div class="sub-modal-card p-4 rounded-3 border border-danger shadow-lg">
-        <h6 class="text-white fw-bold mb-1 d-flex align-items-center gap-2">
-          <i class="bi bi-exclamation-octagon-fill text-danger"></i> Delete Operator Account?
-        </h6>
-        <p class="text-muted small mb-3">
+    <div v-if="showDeleteConfirmModal" class="sub-modal-backdrop d-flex align-items-center justify-content-center p-3">
+      <div class="sub-modal-card p-4 rounded shadow-lg">
+        <div class="d-flex align-items-center mb-2">
+          <i class="bi bi-exclamation-octagon-fill text-danger me-2 fs-5"></i>
+          <h6 class="text-white fw-bold mb-0">Delete Operator Account?</h6>
+        </div>
+        <p class="text-muted small mb-3" style="font-size: 0.78rem;">
           Are you sure you want to remove <strong>{{ operatorToDelete?.name }}</strong>? They will no longer be able to log in. Your shared bond data will remain safe.
         </p>
 
@@ -524,7 +540,7 @@ onMounted(() => {
           </button>
           <button
             type="button"
-            class="btn btn-sm btn-danger px-3 fw-semibold d-inline-flex align-items-center gap-1.5"
+            class="btn btn-sm btn-danger px-3 fw-medium d-inline-flex align-items-center gap-1.5"
             :disabled="isDeleting"
             @click="confirmDelete"
           >
@@ -538,111 +554,235 @@ onMounted(() => {
 </template>
 
 <style scoped>
-.operator-modal-backdrop {
+/* Modal Backdrop & Container matching Jupiter Clean Theme */
+.jupiter-modal-backdrop {
   position: fixed;
   top: 0;
   left: 0;
   width: 100vw;
   height: 100vh;
-  background: rgba(4, 7, 13, 0.82);
-  backdrop-filter: blur(6px);
-  z-index: 2050;
+  background: rgba(4, 8, 16, 0.85);
+  backdrop-filter: blur(8px);
+  z-index: 1050;
   animation: fadeIn 0.2s ease-out;
 }
 
-.operator-modal-dialog {
+.jupiter-modal-dialog {
   width: 100%;
-  max-width: 860px;
-  max-height: 90vh;
-  display: flex;
-  margin: 1.5rem;
-}
-
-.operator-modal-content {
-  width: 100%;
-  background: #111827;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 14px;
-  box-shadow: 0 20px 45px rgba(0, 0, 0, 0.7);
+  max-width: 900px;
+  max-height: 88vh;
   display: flex;
   flex-direction: column;
-  overflow: hidden;
 }
 
-.modal-icon-badge {
-  width: 36px;
-  height: 36px;
-  border-radius: 9px;
+.jupiter-modal-content {
+  background: #101623;
+  border: 1px solid #1e293b;
+  border-radius: 10px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  max-height: 88vh;
+}
+
+.jupiter-modal-header {
+  background: #101623;
+  border-bottom: 1px solid #1e293b;
+  flex-shrink: 0;
+}
+
+.modal-badge-icon {
+  width: 34px;
+  height: 34px;
+  border-radius: 6px;
   background: rgba(56, 189, 248, 0.12);
-  border: 1px solid rgba(56, 189, 248, 0.3);
+  border: 1px solid rgba(56, 189, 248, 0.25);
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 1.1rem;
+  font-size: 1rem;
+  color: #38bdf8;
+  flex-shrink: 0;
 }
 
-.btn-close-modal {
-  background: transparent;
-  border: none;
+.modal-title-text {
+  font-size: 0.95rem;
+  font-weight: 500;
+  color: #cbd5e1;
+  letter-spacing: 0.01em;
+}
+
+.modal-subtitle-text {
+  font-size: 0.76rem;
+  color: #64748b;
+  display: block;
+}
+
+/* Modal Scrollable Body */
+.jupiter-modal-body {
+  background: #0d121c;
+  overflow-y: auto;
+  flex: 1 1 auto;
+  max-height: calc(88vh - 120px);
+}
+
+.jupiter-modal-footer {
+  background: #101623;
+  border-top: 1px solid #1e293b;
+  flex-shrink: 0;
+}
+
+/* Stats Badges */
+.badge-stat {
+  background: #161e2c;
+  border: 1px solid #222e42;
   color: #94a3b8;
-  font-size: 1.1rem;
-  padding: 4px 8px;
-  border-radius: 6px;
+  font-size: 0.75rem;
+  padding: 0.3rem 0.65rem;
+  border-radius: 4px;
+  font-family: monospace;
+}
+
+.badge-stat-active {
+  background: rgba(16, 185, 129, 0.08);
+  border-color: rgba(16, 185, 129, 0.25);
+  color: #34d399;
+}
+
+/* Button Jupiter Primary */
+.btn-jupiter-primary {
+  background: #1e3a8a;
+  border: 1px solid #2563eb;
+  color: #ffffff;
+  font-size: 0.82rem;
+  padding: 0.35rem 0.85rem;
+  border-radius: 5px;
   cursor: pointer;
   transition: all 0.15s ease;
 }
 
-.btn-close-modal:hover {
+.btn-jupiter-primary:hover:not(:disabled) {
+  background: #2563eb;
+  border-color: #3b82f6;
   color: #ffffff;
-  background: rgba(255, 255, 255, 0.08);
 }
 
+.btn-jupiter-primary:disabled {
+  background: #1e293b;
+  border-color: #334155;
+  color: #64748b;
+  cursor: not-allowed;
+}
+
+/* Operator Form Card */
 .operator-form-card {
-  background: rgba(15, 23, 42, 0.7);
+  background: #131b29;
+  border: 1px solid #1e293b;
+}
+
+.form-card-title {
+  color: #cbd5e1;
+  font-size: 0.86rem;
+  font-weight: 500;
+}
+
+.field-label {
+  color: #78889b;
+  font-size: 0.76rem;
 }
 
 .jupiter-input {
-  background: #0b0f19 !important;
-  border: 1px solid rgba(255, 255, 255, 0.15) !important;
-  color: #f8fafc !important;
-  border-radius: 6px !important;
+  background: #0b0f17 !important;
+  border: 1px solid #233044 !important;
+  color: #cbd5e1 !important;
+  border-radius: 5px !important;
+  font-size: 0.82rem !important;
 }
 
 .jupiter-input:focus {
   border-color: #38bdf8 !important;
-  box-shadow: 0 0 0 2px rgba(56, 189, 248, 0.2) !important;
+  box-shadow: 0 0 0 2px rgba(56, 189, 248, 0.15) !important;
 }
 
-.operator-table-wrapper {
-  background: #0b0f19;
-  max-height: 380px;
-  overflow-y: auto;
+/* Table styling */
+.jupiter-table-container {
+  background: #111722;
+  border: 1px solid #1e293b;
+  border-radius: 6px;
+  overflow: hidden;
 }
 
-.table-header-row th {
-  background: #131d2e !important;
-  font-size: 0.76rem;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  font-weight: 600;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1) !important;
+.jupiter-table {
+  width: 100%;
+  font-size: 0.81rem;
+  color: #cbd5e1;
+  border-collapse: collapse;
+}
+
+.jupiter-table thead th {
+  background: #161e2c !important;
+  color: #78889b !important;
+  font-weight: 500;
+  font-size: 0.73rem;
+  letter-spacing: 0.02em;
+  padding: 0.6rem 0.75rem;
+  border-bottom: 1px solid #222e42 !important;
+  white-space: nowrap;
+}
+
+.jupiter-table tbody td {
+  padding: 0.55rem 0.75rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.035);
+  background: transparent;
+  color: #cbd5e1;
+}
+
+.jupiter-table tbody tr:hover td {
+  background: rgba(148, 163, 184, 0.04);
+}
+
+.cell-num {
+  color: #556579;
+  font-size: 0.78rem;
+}
+
+.cell-main {
+  color: #cbd5e1;
+  font-weight: 500;
+  font-size: 0.82rem;
+}
+
+.cell-muted {
+  color: #718296;
 }
 
 .operator-avatar {
-  width: 30px;
-  height: 30px;
+  width: 28px;
+  height: 28px;
   border-radius: 50%;
-  background: linear-gradient(135deg, rgba(56, 189, 248, 0.25), rgba(99, 102, 241, 0.25));
-  border: 1px solid rgba(56, 189, 248, 0.4);
+  background: rgba(56, 189, 248, 0.15);
+  border: 1px solid rgba(56, 189, 248, 0.3);
   color: #38bdf8;
-  font-weight: bold;
+  font-weight: 600;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 0.82rem;
+  font-size: 0.78rem;
   flex-shrink: 0;
 }
 
+.badge-role-op {
+  background: rgba(56, 189, 248, 0.08);
+  border: 1px solid rgba(56, 189, 248, 0.2);
+  color: #38bdf8;
+  font-size: 0.72rem;
+  padding: 0.2rem 0.5rem;
+  border-radius: 4px;
+  display: inline-flex;
+  align-items: center;
+}
+
+/* Status Button */
 .status-toggle-btn {
   border: 1px solid transparent;
   font-size: 0.72rem;
@@ -651,23 +791,23 @@ onMounted(() => {
 }
 
 .status-btn-active {
-  background: rgba(34, 197, 94, 0.12);
-  border-color: rgba(34, 197, 94, 0.35);
-  color: #4ade80;
+  background: rgba(16, 185, 129, 0.1);
+  border-color: rgba(16, 185, 129, 0.25);
+  color: #34d399;
 }
 
 .status-btn-active:hover {
-  background: rgba(34, 197, 94, 0.22);
+  background: rgba(16, 185, 129, 0.2);
 }
 
 .status-btn-suspended {
-  background: rgba(239, 68, 68, 0.12);
-  border-color: rgba(239, 68, 68, 0.35);
+  background: rgba(239, 68, 68, 0.1);
+  border-color: rgba(239, 68, 68, 0.25);
   color: #f87171;
 }
 
 .status-btn-suspended:hover {
-  background: rgba(239, 68, 68, 0.22);
+  background: rgba(239, 68, 68, 0.2);
 }
 
 .status-dot {
@@ -677,29 +817,65 @@ onMounted(() => {
   background: currentColor;
 }
 
+/* Action Icons */
 .btn-icon-action {
-  width: 28px;
-  height: 28px;
+  width: 26px;
+  height: 26px;
   padding: 0;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border-radius: 6px;
-  font-size: 0.8rem;
+  border-radius: 4px;
+  font-size: 0.78rem;
+  border: 1px solid transparent;
+  background: transparent;
+  cursor: pointer;
   transition: all 0.15s ease;
 }
 
+.btn-action-edit {
+  color: #94a3b8;
+  border-color: #263447;
+}
+
+.btn-action-edit:hover {
+  color: #ffffff;
+  background: #1e293b;
+  border-color: #334155;
+}
+
+.btn-action-key {
+  color: #f59e0b;
+  border-color: rgba(245, 158, 11, 0.25);
+}
+
+.btn-action-key:hover {
+  background: rgba(245, 158, 11, 0.15);
+  color: #fbbf24;
+}
+
+.btn-action-delete {
+  color: #ef4444;
+  border-color: rgba(239, 68, 68, 0.25);
+}
+
+.btn-action-delete:hover {
+  background: rgba(239, 68, 68, 0.15);
+  color: #f87171;
+}
+
 .empty-icon-circle {
-  width: 54px;
-  height: 54px;
+  width: 46px;
+  height: 46px;
   border-radius: 50%;
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px dashed rgba(255, 255, 255, 0.15);
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px dashed rgba(255, 255, 255, 0.12);
   display: flex;
   align-items: center;
   justify-content: center;
 }
 
+/* Sub-modal */
 .sub-modal-backdrop {
   position: fixed;
   top: 0;
@@ -707,13 +883,15 @@ onMounted(() => {
   width: 100vw;
   height: 100vh;
   background: rgba(0, 0, 0, 0.75);
-  z-index: 2200;
+  backdrop-filter: blur(4px);
+  z-index: 1100;
 }
 
 .sub-modal-card {
-  background: #111827;
+  background: #111722;
+  border: 1px solid #1e293b;
   max-width: 420px;
-  width: 90%;
+  width: 100%;
 }
 
 @keyframes fadeIn {
