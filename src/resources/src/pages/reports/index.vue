@@ -97,6 +97,21 @@ const toggleBenBeneficiary = (name: string) => {
   } else {
     benSelectedBeneficiaries.value.push(trimmed);
   }
+};
+
+const handleBenOkClick = () => {
+  if (benSelectedBeneficiaries.value.length > 0) {
+    benBeneficiaryInput.value = `${benSelectedBeneficiaries.value.length} Selected`;
+  } else {
+    benBeneficiaryInput.value = "";
+  }
+  benShowDropdown.value = false;
+  fetchBeneficiaryData(1);
+};
+
+const handleBenClearClick = () => {
+  benSelectedBeneficiaries.value = [];
+  benBeneficiaryInput.value = "";
   fetchBeneficiaryData(1);
 };
 
@@ -142,7 +157,12 @@ const searchBenBeneficiariesFromApi = (query: string) => {
 
 const handleBenBeneficiaryFocus = () => {
   const q = benBeneficiaryInput.value.trim();
-  if (q) searchBenBeneficiariesFromApi(q);
+  if (q.endsWith("Selected") || !q) {
+    benSuggestions.value = beneficiaryOptions.value.slice(0, 50);
+    benShowDropdown.value = benSuggestions.value.length > 0;
+  } else {
+    searchBenBeneficiariesFromApi(q);
+  }
 };
 
 const handleBenBeneficiaryInput = () => {
@@ -152,9 +172,6 @@ const handleBenBeneficiaryInput = () => {
     benShowDropdown.value = false;
   } else {
     searchBenBeneficiariesFromApi(q);
-  }
-  if (benSelectedBeneficiaries.value.length === 0) {
-    handleBenSearchInput();
   }
 };
 
@@ -168,7 +185,9 @@ const getBenBeneficiaryParam = () => {
   if (benSelectedBeneficiaries.value.length > 0) {
     return JSON.stringify(benSelectedBeneficiaries.value);
   }
-  return benBeneficiaryInput.value.trim() || undefined;
+  const q = benBeneficiaryInput.value.trim();
+  if (q.endsWith("Selected")) return undefined;
+  return q || undefined;
 };
 
 let benDebounceTimer: any = null;
@@ -421,6 +440,21 @@ const toggleLcBeneficiary = (name: string) => {
   } else {
     lcSelectedBeneficiaries.value.push(trimmed);
   }
+};
+
+const handleLcOkClick = () => {
+  if (lcSelectedBeneficiaries.value.length > 0) {
+    lcBeneficiaryInput.value = `${lcSelectedBeneficiaries.value.length} Selected`;
+  } else {
+    lcBeneficiaryInput.value = "";
+  }
+  lcShowDropdown.value = false;
+  fetchLocalLcData(1);
+};
+
+const handleLcClearClick = () => {
+  lcSelectedBeneficiaries.value = [];
+  lcBeneficiaryInput.value = "";
   fetchLocalLcData(1);
 };
 
@@ -466,7 +500,12 @@ const searchLcBeneficiariesFromApi = (query: string) => {
 
 const handleLcBeneficiaryFocus = () => {
   const q = lcBeneficiaryInput.value.trim();
-  if (q) searchLcBeneficiariesFromApi(q);
+  if (q.endsWith("Selected") || !q) {
+    lcSuggestions.value = beneficiaryOptions.value.slice(0, 50);
+    lcShowDropdown.value = lcSuggestions.value.length > 0;
+  } else {
+    searchLcBeneficiariesFromApi(q);
+  }
 };
 
 const handleLcBeneficiaryInput = () => {
@@ -476,9 +515,6 @@ const handleLcBeneficiaryInput = () => {
     lcShowDropdown.value = false;
   } else {
     searchLcBeneficiariesFromApi(q);
-  }
-  if (lcSelectedBeneficiaries.value.length === 0) {
-    handleLcSearchInput();
   }
 };
 
@@ -492,7 +528,9 @@ const getLcBeneficiaryParam = () => {
   if (lcSelectedBeneficiaries.value.length > 0) {
     return JSON.stringify(lcSelectedBeneficiaries.value);
   }
-  return lcBeneficiaryInput.value.trim() || undefined;
+  const q = lcBeneficiaryInput.value.trim();
+  if (q.endsWith("Selected")) return undefined;
+  return q || undefined;
 };
 
 let lcDebounceTimer: any = null;
@@ -1208,6 +1246,7 @@ onMounted(() => {
                       @input="handleBenBeneficiaryInput"
                       @blur="handleBenBeneficiaryBlur"
                       @keydown.esc="benShowDropdown = false"
+                      @keydown.enter.prevent="handleBenOkClick"
                     />
                     <button
                       v-if="benSelectedBeneficiaries.length > 0 || benBeneficiaryInput"
@@ -1224,17 +1263,40 @@ onMounted(() => {
                     v-if="benShowDropdown && benSuggestions.length > 0"
                     class="beneficiary-autocomplete-dropdown shadow-lg"
                   >
-                    <div
-                      v-for="(name, bIdx) in benSuggestions"
-                      :key="bIdx"
-                      class="ben-dropdown-item d-flex align-items-center gap-2 px-3 py-2 cursor-pointer"
-                      :class="{ 'is-selected': isBenBeneficiarySelected(name) }"
-                      @mousedown.prevent="toggleBenBeneficiary(name)"
-                    >
-                      <div class="ben-check-slot flex-shrink-0 d-flex align-items-center justify-content-center">
-                        <i v-if="isBenBeneficiarySelected(name)" class="bi bi-check2 text-white fs-6 fw-bold"></i>
+                    <div class="ben-dropdown-list">
+                      <div
+                        v-for="(name, bIdx) in benSuggestions"
+                        :key="bIdx"
+                        class="ben-dropdown-item d-flex align-items-center gap-2 px-3 py-2 cursor-pointer"
+                        :class="{ 'is-selected': isBenBeneficiarySelected(name) }"
+                        @mousedown.prevent="toggleBenBeneficiary(name)"
+                      >
+                        <div class="ben-check-slot flex-shrink-0 d-flex align-items-center justify-content-center">
+                          <i v-if="isBenBeneficiarySelected(name)" class="bi bi-check2 text-white fs-6 fw-bold"></i>
+                        </div>
+                        <span class="ben-item-name text-white small text-truncate">{{ name }}</span>
                       </div>
-                      <span class="ben-item-name text-white small text-truncate">{{ name }}</span>
+                    </div>
+                    <div class="ben-dropdown-footer d-flex align-items-center justify-content-between px-3 py-2 border-top">
+                      <span class="ben-selected-count small text-muted">
+                        <strong class="text-warning">{{ benSelectedBeneficiaries.length }}</strong> Selected
+                      </span>
+                      <div class="d-flex align-items-center gap-2">
+                        <button
+                          type="button"
+                          class="btn btn-xs btn-clear-dropdown"
+                          @mousedown.prevent="handleBenClearClick"
+                        >
+                          Clear
+                        </button>
+                        <button
+                          type="button"
+                          class="btn btn-xs btn-ok-dropdown"
+                          @mousedown.prevent="handleBenOkClick"
+                        >
+                          OK
+                        </button>
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -1517,6 +1579,7 @@ onMounted(() => {
                       @input="handleLcBeneficiaryInput"
                       @blur="handleLcBeneficiaryBlur"
                       @keydown.esc="lcShowDropdown = false"
+                      @keydown.enter.prevent="handleLcOkClick"
                     />
                     <button
                       v-if="lcSelectedBeneficiaries.length > 0 || lcBeneficiaryInput"
@@ -1533,17 +1596,40 @@ onMounted(() => {
                     v-if="lcShowDropdown && lcSuggestions.length > 0"
                     class="beneficiary-autocomplete-dropdown shadow-lg"
                   >
-                    <div
-                      v-for="(name, bIdx) in lcSuggestions"
-                      :key="bIdx"
-                      class="ben-dropdown-item d-flex align-items-center gap-2 px-3 py-2 cursor-pointer"
-                      :class="{ 'is-selected': isLcBeneficiarySelected(name) }"
-                      @mousedown.prevent="toggleLcBeneficiary(name)"
-                    >
-                      <div class="ben-check-slot flex-shrink-0 d-flex align-items-center justify-content-center">
-                        <i v-if="isLcBeneficiarySelected(name)" class="bi bi-check2 text-white fs-6 fw-bold"></i>
+                    <div class="ben-dropdown-list">
+                      <div
+                        v-for="(name, bIdx) in lcSuggestions"
+                        :key="bIdx"
+                        class="ben-dropdown-item d-flex align-items-center gap-2 px-3 py-2 cursor-pointer"
+                        :class="{ 'is-selected': isLcBeneficiarySelected(name) }"
+                        @mousedown.prevent="toggleLcBeneficiary(name)"
+                      >
+                        <div class="ben-check-slot flex-shrink-0 d-flex align-items-center justify-content-center">
+                          <i v-if="isLcBeneficiarySelected(name)" class="bi bi-check2 text-white fs-6 fw-bold"></i>
+                        </div>
+                        <span class="ben-item-name text-white small text-truncate">{{ name }}</span>
                       </div>
-                      <span class="ben-item-name text-white small text-truncate">{{ name }}</span>
+                    </div>
+                    <div class="ben-dropdown-footer d-flex align-items-center justify-content-between px-3 py-2 border-top">
+                      <span class="ben-selected-count small text-muted">
+                        <strong class="text-warning">{{ lcSelectedBeneficiaries.length }}</strong> Selected
+                      </span>
+                      <div class="d-flex align-items-center gap-2">
+                        <button
+                          type="button"
+                          class="btn btn-xs btn-clear-dropdown"
+                          @mousedown.prevent="handleLcClearClick"
+                        >
+                          Clear
+                        </button>
+                        <button
+                          type="button"
+                          class="btn btn-xs btn-ok-dropdown"
+                          @mousedown.prevent="handleLcOkClick"
+                        >
+                          OK
+                        </button>
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -2507,12 +2593,62 @@ onMounted(() => {
   background: #0f1624;
   border: 1px solid #283548;
   border-radius: 6px;
-  max-height: 250px;
-  overflow-y: auto;
   z-index: 1050;
   margin-top: 2px;
-  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.6);
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.7);
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.ben-dropdown-list {
+  max-height: 220px;
+  overflow-y: auto;
   padding: 4px 0;
+}
+
+.ben-dropdown-footer {
+  background: #151d2c;
+  border-top: 1px solid #283548 !important;
+  font-size: 0.8rem;
+}
+
+.ben-selected-count {
+  font-size: 0.78rem;
+  color: #94a3b8;
+}
+
+.btn-clear-dropdown {
+  background: #1e293b;
+  color: #cbd5e1;
+  border: 1px solid #334155;
+  font-size: 0.75rem;
+  padding: 2px 10px;
+  border-radius: 4px;
+  transition: all 0.15s ease;
+}
+
+.btn-clear-dropdown:hover {
+  background: #334155;
+  color: #f8fafc;
+}
+
+.btn-ok-dropdown {
+  background: #0284c7;
+  color: #ffffff;
+  border: 1px solid #0284c7;
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 2px 14px;
+  border-radius: 4px;
+  transition: all 0.15s ease;
+}
+
+.btn-ok-dropdown:hover {
+  background: #0369a1;
+  border-color: #0369a1;
+  color: #ffffff;
 }
 
 .ben-dropdown-item {
