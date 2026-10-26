@@ -19,8 +19,11 @@ FROM oven/bun:${BUN_VERSION} AS runner
 
 WORKDIR /app
 
+# Install curl, wget & ca-certificates for Coolify healthchecks
+RUN apt-get update && apt-get install -y --no-install-recommends curl wget ca-certificates && rm -rf /var/lib/apt/lists/*
+
 ENV NODE_ENV=production
-ENV APP_PORT=3000
+ENV APP_PORT=80
 
 # Production dependencies
 COPY package.json ./
@@ -38,9 +41,9 @@ COPY tsconfig.json ./
 COPY docker-entrypoint.sh ./
 RUN chmod +x docker-entrypoint.sh
 
-EXPOSE 3000
+EXPOSE 80 3000
 
-HEALTHCHECK --interval=15s --timeout=5s --start-period=20s --retries=3 \
-  CMD bun --eval "fetch(\`http://localhost:\${process.env.APP_PORT || process.env.PORT || 3000}/health\`).then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"
+HEALTHCHECK --interval=10s --timeout=5s --start-period=60s --retries=5 \
+  CMD curl -f http://127.0.0.1:${APP_PORT:-80}/health || wget -qO- http://127.0.0.1:${APP_PORT:-80}/health || bun --eval "fetch(\`http://127.0.0.1:\${process.env.APP_PORT || 80}/health\`).then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"
 
 CMD ["/bin/sh", "/app/docker-entrypoint.sh"]
