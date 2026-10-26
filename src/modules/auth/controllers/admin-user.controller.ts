@@ -32,10 +32,15 @@ export const listUsers: Handler = async (c: any) => {
     const search = (c.req.query("search") || "").trim().toLowerCase();
     const statusFilter = (c.req.query("status") || "").trim().toLowerCase();
 
-    const allUsers = await db.query.users.findMany({
+    let allUsers = await db.query.users.findMany({
       with: { role: true, parent: true, operators: true },
       orderBy: [desc(users.createdAt)]
     });
+
+    // If requester is not SuperAdmin, hide SuperAdmin account so Admin only manages office users
+    if (!isUserSuperAdmin(auth)) {
+      allUsers = allUsers.filter((u: any) => String(u.role?.name || "").toLowerCase() !== "superadmin");
+    }
 
     // Get total bond records grouped by user_id
     const recordCounts = await db
@@ -542,9 +547,37 @@ export const updateUserRole: Handler = async (c: any) => {
 
     await db.update(users).set(updates).where(eq(users.id, userId));
 
+    let selfDemoted = false;
+    let responseMessage = `Role for "${targetUser.name}" successfully changed to "${roleName}".`;
+
+    // If an Admin (not SuperAdmin) sets another user as Admin,
+    // they automatically transfer the admin role and become a regular user
+    if (roleName === "admin" && !isSuperAdmin) {
+      let userRoleRecord = await db.query.roles.findFirst({
+        where: eq(roles.name, "user")
+      });
+      if (!userRoleRecord) {
+        try {
+          const [created] = await db.insert(roles).values({ name: "user" }).returning();
+          userRoleRecord = created;
+        } catch (_) {
+          userRoleRecord = await db.query.roles.findFirst({ where: eq(roles.name, "user") });
+        }
+      }
+      if (userRoleRecord) {
+        await db
+          .update(users)
+          .set({ roleId: userRoleRecord.id, updatedAt: new Date() })
+          .where(eq(users.id, Number(auth.id)));
+        selfDemoted = true;
+        responseMessage = `Admin role successfully transferred to "${targetUser.name}". Your account has been converted to User role.`;
+      }
+    }
+
     return c.json({
       success: true,
-      message: `Role for "${targetUser.name}" successfully changed to "${roleName}".`,
+      message: responseMessage,
+      selfDemoted,
       data: {
         userId,
         role: roleName,

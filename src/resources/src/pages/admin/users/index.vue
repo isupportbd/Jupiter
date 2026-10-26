@@ -109,6 +109,11 @@ const confirmChangeRole = async () => {
     if (res.data?.success) {
       showToast(res.data.message || "User role updated successfully!");
       showRoleModal.value = false;
+      if (res.data.selfDemoted) {
+        alert(res.data.message || "Admin role transferred. You are now a User.");
+        window.location.href = "/";
+        return;
+      }
       fetchUsers();
     }
   } catch (err: any) {
@@ -574,12 +579,12 @@ onMounted(() => {
                     </span>
                   </template>
 
-                  <!-- Renew Button (for active/expired users) -->
+                  <!-- Renew Button (Only SuperAdmin can renew an Office Admin's billing) -->
                   <button
-                    v-if="u.status === 'active' && u.role !== 'superadmin' && (u.role !== 'admin' || isCurrentSuperAdmin)"
+                    v-if="u.status === 'active' && u.role === 'admin' && isCurrentSuperAdmin"
                     type="button"
                     class="btn-action-renew"
-                    :title="u.role === 'admin' ? 'SuperAdmin: Renew Office Admin Billing (+30d)' : 'Renew/extend billing cycle by +30 days'"
+                    title="SuperAdmin: Renew Office Admin Billing (+30d)"
                     @click="openRenewModal(u)"
                   >
                     <i class="bi bi-arrow-repeat"></i>
@@ -977,6 +982,17 @@ onMounted(() => {
               </div>
               <div class="custom-radio-circle" :class="{ checked: selectedRole === 'superadmin' }">
                 <div class="radio-core-dot"></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Warning for Admin Role Transfer -->
+          <div v-if="!isCurrentSuperAdmin && selectedRole === 'admin'" class="alert alert-warning py-2.5 px-3 small rounded-3 mb-3 border-0" style="background: rgba(245, 158, 11, 0.15); color: #fde68a;">
+            <div class="d-flex align-items-center gap-2">
+              <i class="bi bi-exclamation-triangle-fill fs-5 text-warning flex-shrink-0"></i>
+              <div>
+                <strong class="text-white d-block">Admin Privileges Transfer:</strong>
+                Setting this user as Admin will transfer your Admin privileges to them. Your account will automatically become a regular User.
               </div>
             </div>
           </div>

@@ -141,9 +141,9 @@ const handleLogout = async () => {
 <template>
   <header class="jupiter-navbar">
     <div class="jupiter-grid-container h-100 d-flex align-items-center justify-content-between px-3">
-      <!-- Left: Brand Logo Only -->
-      <div class="d-flex align-items-center" style="min-width: 140px;">
-        <router-link :to="isAdmin ? '/users' : '/'" class="jupiter-brand d-flex align-items-center gap-2.5 text-decoration-none">
+      <!-- Left: Brand Logo & Navigation Links -->
+      <div class="d-flex align-items-center gap-3">
+        <router-link to="/" class="jupiter-brand d-flex align-items-center gap-2.5 text-decoration-none">
           <div class="brand-badge-icon">
             <svg width="24" height="24" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
               <defs>
@@ -169,6 +169,40 @@ const handleLogout = async () => {
             <span class="fw-bold text-white fs-5 tracking-tight brand-title">Jupiter</span>
           </div>
         </router-link>
+
+        <!-- Top Navigation Links -->
+        <nav v-if="authStore.isAuthenticated" class="d-none d-md-flex align-items-center gap-1.5 ms-1">
+          <router-link
+            to="/"
+            class="header-nav-btn"
+            :class="{ active: route.path === '/' }"
+            title="Upload Data & Dashboard"
+          >
+            <i class="bi bi-cloud-arrow-up me-1"></i>
+            <span>Upload Data</span>
+          </router-link>
+
+          <router-link
+            to="/reports"
+            class="header-nav-btn"
+            :class="{ active: route.path === '/reports' }"
+            title="Reports & Analytics"
+          >
+            <i class="bi bi-file-earmark-bar-graph me-1"></i>
+            <span>Reports</span>
+          </router-link>
+
+          <router-link
+            v-if="isAdmin"
+            to="/users"
+            class="header-nav-btn nav-btn-admin"
+            :class="{ active: route.path === '/users' }"
+            title="Admin Panel: User Setup & Approvals"
+          >
+            <i class="bi bi-shield-shaded me-1"></i>
+            <span>Admin Panel</span>
+          </router-link>
+        </nav>
       </div>
 
       <!-- Center: Storage Size & Subscription Status Badges in CENTER -->
@@ -281,16 +315,65 @@ const handleLogout = async () => {
 
             <div class="user-card-divider"></div>
 
-            <!-- Admin users link -->
-            <router-link
-              v-if="isAdmin"
-              to="/users"
-              class="dropdown-item user-card-item d-flex align-items-center gap-2 px-3 py-2"
-              @click="isDropdownOpen = false"
-            >
-              <i class="bi bi-people-fill text-primary"></i>
-              <span>User &amp; Billing</span>
-            </router-link>
+            <!-- Panel Switcher for Admin / SuperAdmin -->
+            <template v-if="isAdmin">
+              <div class="px-3 pt-2 pb-1 text-muted text-uppercase fw-semibold" style="font-size: 0.68rem; letter-spacing: 0.5px;">
+                Switch Panel
+              </div>
+
+              <!-- 1. User Panel (Upload Data & Reports) -->
+              <router-link
+                to="/"
+                class="dropdown-item user-card-item d-flex align-items-center justify-content-between px-3 py-2"
+                :class="{ 'panel-active': route.path === '/' || route.path === '/reports' }"
+                @click="isDropdownOpen = false"
+              >
+                <div class="d-flex align-items-center gap-2">
+                  <i class="bi bi-speedometer2 text-info"></i>
+                  <span>User Panel (Upload &amp; Reports)</span>
+                </div>
+                <i v-if="route.path === '/' || route.path === '/reports'" class="bi bi-check2 text-info fw-bold"></i>
+              </router-link>
+
+              <!-- 2. Admin Panel (Users & Billing) -->
+              <router-link
+                to="/users"
+                class="dropdown-item user-card-item d-flex align-items-center justify-content-between px-3 py-2"
+                :class="{ 'panel-active': route.path === '/users' }"
+                @click="isDropdownOpen = false"
+              >
+                <div class="d-flex align-items-center gap-2">
+                  <i class="bi bi-shield-shaded text-warning"></i>
+                  <span>Admin Panel (User Setup)</span>
+                </div>
+                <i v-if="route.path === '/users'" class="bi bi-check2 text-warning fw-bold"></i>
+              </router-link>
+
+              <div class="user-card-divider"></div>
+            </template>
+
+            <!-- Links for Regular Users -->
+            <template v-else>
+              <router-link
+                to="/"
+                class="dropdown-item user-card-item d-flex align-items-center gap-2 px-3 py-2"
+                @click="isDropdownOpen = false"
+              >
+                <i class="bi bi-cloud-arrow-up text-info"></i>
+                <span>Upload Data</span>
+              </router-link>
+
+              <router-link
+                to="/reports"
+                class="dropdown-item user-card-item d-flex align-items-center gap-2 px-3 py-2"
+                @click="isDropdownOpen = false"
+              >
+                <i class="bi bi-file-earmark-bar-graph text-info"></i>
+                <span>Reports</span>
+              </router-link>
+
+              <div class="user-card-divider"></div>
+            </template>
 
             <!-- Sign Out -->
             <button
@@ -616,13 +699,41 @@ const handleLogout = async () => {
   transition: all 0.15s ease-in-out;
 }
 
-.user-card-item:hover {
-  background: rgba(255, 255, 255, 0.07) !important;
-  color: #ffffff !important;
+.user-card-item.panel-active {
+  background: rgba(56, 189, 248, 0.12) !important;
+  color: #38bdf8 !important;
+  font-weight: 600;
 }
 
-.user-card-item.text-danger:hover {
-  background: rgba(239, 68, 68, 0.15) !important;
-  color: #f87171 !important;
+.header-nav-btn {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.35rem 0.75rem;
+  border-radius: 6px;
+  font-size: 0.82rem;
+  font-weight: 500;
+  color: #94a3b8;
+  text-decoration: none;
+  background: transparent;
+  border: 1px solid transparent;
+  transition: all 0.15s ease;
+}
+
+.header-nav-btn:hover {
+  color: #f1f5f9;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.header-nav-btn.active {
+  color: #38bdf8;
+  background: rgba(56, 189, 248, 0.1);
+  border-color: rgba(56, 189, 248, 0.3);
+  font-weight: 600;
+}
+
+.header-nav-btn.nav-btn-admin.active {
+  color: #fbbf24;
+  background: rgba(245, 158, 11, 0.12);
+  border-color: rgba(245, 158, 11, 0.35);
 }
 </style>
