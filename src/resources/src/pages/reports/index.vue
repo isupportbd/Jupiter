@@ -788,6 +788,21 @@ const mwYearFilter = ref("");
 const mwMonthFrom = ref("");
 const mwMonthTo = ref("");
 
+// Pagination for Monthwise Summary (10 records per page)
+const mwCurrentPage = ref(1);
+const mwPageSize = ref(10);
+const mwTotalPages = computed(() => Math.ceil(mwRecords.value.length / mwPageSize.value) || 1);
+
+const paginatedMwRecords = computed(() => {
+  const start = (mwCurrentPage.value - 1) * mwPageSize.value;
+  return mwRecords.value.slice(start, start + mwPageSize.value);
+});
+
+const changeMwPage = (page: number) => {
+  if (page < 1 || page > mwTotalPages.value || page === mwCurrentPage.value) return;
+  mwCurrentPage.value = page;
+};
+
 // Interactive Count Mode State (true = Unique / Default, false = Regular)
 const isLcUnique = ref(true);
 const isBenUnique = ref(true);
@@ -946,12 +961,14 @@ const fetchMonthwiseData = async () => {
 };
 
 const handleMwFilterChange = () => {
+  mwCurrentPage.value = 1;
   fetchMonthwiseData();
 };
 
 const clearMwMonthRange = () => {
   mwMonthFrom.value = "";
   mwMonthTo.value = "";
+  mwCurrentPage.value = 1;
   fetchMonthwiseData();
 };
 
@@ -960,6 +977,7 @@ const resetMwFilters = () => {
   mwMonthFrom.value = "";
   mwMonthTo.value = "";
   selectedMonthKeys.value = [];
+  mwCurrentPage.value = 1;
   fetchMonthwiseData();
 };
 
@@ -2032,7 +2050,7 @@ onMounted(() => {
                 </tr>
 
                 <tr
-                  v-for="(row, idx) in mwRecords"
+                  v-for="(row, idx) in paginatedMwRecords"
                   :key="row.monthKey || idx"
                   :class="{ 'row-selected': selectedMonthKeys.includes(row.monthKey) }"
                 >
@@ -2044,7 +2062,7 @@ onMounted(() => {
                       @change="toggleSelectMonth(row.monthKey)"
                     />
                   </td>
-                  <td class="text-center cell-num">{{ idx + 1 }}</td>
+                  <td class="text-center cell-num">{{ (mwCurrentPage - 1) * mwPageSize + idx + 1 }}</td>
                   <td class="cell-main fw-medium font-monospace">
                     <i class="bi bi-calendar3 me-2 text-warning opacity-75"></i>
                     {{ row.monthLabel || row.monthKey }}
@@ -2097,6 +2115,72 @@ onMounted(() => {
                 </tr>
               </tfoot>
             </table>
+          </div>
+
+          <!-- Pagination Footer (10 items per page) -->
+          <div
+            v-if="mwRecords.length > 0"
+            class="d-flex align-items-center justify-content-between flex-wrap gap-3 mt-2 pt-2 border-top-subtle"
+          >
+            <div class="pagination-info text-muted small">
+              Showing
+              <span class="text-light fw-medium">
+                {{ (mwCurrentPage - 1) * mwPageSize + 1 }}
+              </span>
+              to
+              <span class="text-light fw-medium">
+                {{ Math.min(mwCurrentPage * mwPageSize, mwRecords.length) }}
+              </span>
+              of
+              <span class="text-light fw-medium">{{ mwRecords.length.toLocaleString() }}</span>
+              entries
+            </div>
+
+            <div class="pagination-controls d-flex align-items-center gap-1">
+              <button
+                type="button"
+                class="btn-page"
+                :disabled="mwCurrentPage <= 1 || mwIsLoading"
+                title="First Page"
+                @click="changeMwPage(1)"
+              >
+                <i class="bi bi-chevron-double-left"></i>
+              </button>
+
+              <button
+                type="button"
+                class="btn-page"
+                :disabled="mwCurrentPage <= 1 || mwIsLoading"
+                title="Previous Page"
+                @click="changeMwPage(mwCurrentPage - 1)"
+              >
+                <i class="bi bi-chevron-left"></i>
+              </button>
+
+              <span class="page-indicator mx-2">
+                Page <strong class="text-white">{{ mwCurrentPage }}</strong> of <strong class="text-white">{{ mwTotalPages }}</strong>
+              </span>
+
+              <button
+                type="button"
+                class="btn-page"
+                :disabled="mwCurrentPage >= mwTotalPages || mwIsLoading"
+                title="Next Page"
+                @click="changeMwPage(mwCurrentPage + 1)"
+              >
+                <i class="bi bi-chevron-right"></i>
+              </button>
+
+              <button
+                type="button"
+                class="btn-page"
+                :disabled="mwCurrentPage >= mwTotalPages || mwIsLoading"
+                title="Last Page"
+                @click="changeMwPage(mwTotalPages)"
+              >
+                <i class="bi bi-chevron-double-right"></i>
+              </button>
+            </div>
           </div>
         </div>
       </div>
