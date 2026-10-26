@@ -19,8 +19,8 @@ FROM oven/bun:${BUN_VERSION} AS runner
 
 WORKDIR /app
 
-# Install curl, wget & ca-certificates for Coolify healthchecks
-RUN apt-get update && apt-get install -y --no-install-recommends curl wget ca-certificates && rm -rf /var/lib/apt/lists/*
+# Install curl, wget, ca-certificates & postgresql-client (for pg_dump/psql backup & restore)
+RUN apt-get update && apt-get install -y --no-install-recommends curl wget ca-certificates postgresql-client && rm -rf /var/lib/apt/lists/*
 
 ENV NODE_ENV=production
 ENV APP_PORT=80

@@ -246,12 +246,9 @@ export const getSummary: Handler = async (c: any) => {
  */
 export const getDatabaseStorageSize: Handler = async (c: any) => {
   try {
-    const { userId, isSuperOrAdmin } = getAuthContext(c);
+    const { userId } = getAuthContext(c);
     if (!userId) {
       return c.json({ message: "Unauthorized" }, HttpStatusCodes.UNAUTHORIZED);
-    }
-    if (!isSuperOrAdmin) {
-      return c.json({ message: "Access denied. Administrator privileges required." }, HttpStatusCodes.FORBIDDEN);
     }
 
     const result: any = await db.execute(

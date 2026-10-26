@@ -1,6 +1,7 @@
 import { spawn } from "node:child_process";
 import { existsSync, mkdirSync, unlinkSync, writeFileSync } from "node:fs";
 import path from "node:path";
+import { Readable } from "node:stream";
 import type { Handler } from "hono";
 import { HttpStatusCodes } from "@/framework/facade.js";
 import { syncDatabaseSchemaAndSuperAdmin } from "@/database/sync.js";
@@ -13,7 +14,7 @@ function getDatabaseUrl(): string {
 }
 
 /**
- * 1. Download Full SQL Backup of Jupiter Tables
+ * 1. Download Full SQL Backup of Jupiter Tables (Streaming, Zero-RAM buffering)
  * Route: GET /api/bond/backup/download
  * Authorization: SuperAdmin only
  */
@@ -33,7 +34,6 @@ export const downloadDatabaseBackup: Handler = async (c: any) => {
       "--if-exists",
       "--no-owner",
       "--no-acl",
-      "--inserts",
       "-t", "public.roles",
       "-t", "public.users",
       "-t", "public.refresh_tokens",
@@ -43,29 +43,15 @@ export const downloadDatabaseBackup: Handler = async (c: any) => {
       "-t", "public.bond_records"
     ];
 
-    const sqlContent = await new Promise<string>((resolve, reject) => {
-      const proc = spawn("pg_dump", args, { windowsHide: true });
-      let stdout = "";
-      let stderr = "";
+    const proc = spawn("pg_dump", args, { windowsHide: true });
 
-      proc.stdout.on("data", (data) => {
-        stdout += data.toString();
-      });
-      proc.stderr.on("data", (data) => {
-        stderr += data.toString();
-      });
+    let stderr = "";
+    proc.stderr.on("data", (chunk) => {
+      stderr += chunk.toString();
+    });
 
-      proc.on("error", (err) => {
-        reject(new Error(`Failed to start pg_dump process: ${err.message}`));
-      });
-
-      proc.on("close", (code) => {
-        if (code === 0) {
-          resolve(stdout);
-        } else {
-          reject(new Error(stderr || `pg_dump exited with error code ${code}`));
-        }
-      });
+    proc.on("error", (err) => {
+      console.error("pg_dump spawn error:", err);
     });
 
     const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
@@ -75,7 +61,7 @@ export const downloadDatabaseBackup: Handler = async (c: any) => {
     c.header("Content-Disposition", `attachment; filename="${filename}"`);
     c.header("Cache-Control", "no-cache, no-store, must-revalidate");
 
-    return c.body(sqlContent);
+    return c.body(Readable.toWeb(proc.stdout as any));
   } catch (error: any) {
     console.error("Backup download error:", error);
     return c.json({ message: error.message || "Failed to generate database backup" }, HttpStatusCodes.INTERNAL_SERVER_ERROR);

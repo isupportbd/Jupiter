@@ -77,32 +77,16 @@ const showRestoreConfirmModal = ref(false);
 const selectedSqlFile = ref<File | null>(null);
 const sqlFileInputRef = ref<HTMLInputElement | null>(null);
 
-const handleDownloadBackup = async () => {
-  if (isDownloadingBackup.value) return;
-  isDownloadingBackup.value = true;
-  try {
-    const token = localStorage.getItem("jupiter_access_token");
-    const res = await axios.get("/api/bond/backup/download", {
-      responseType: "blob",
-      headers: token ? { Authorization: `Bearer ${token}` } : undefined
-    });
-
-    const blob = new Blob([res.data], { type: "application/sql" });
-    const url = window.URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    const nowStr = new Date().toISOString().replace(/[:.]/g, "-");
-    link.setAttribute("download", `jupiter_backup_${nowStr}.sql`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    window.URL.revokeObjectURL(url);
-  } catch (err: any) {
-    console.error("Backup download error:", err);
-    alert(err.response?.data?.message || "Failed to download database backup.");
-  } finally {
-    isDownloadingBackup.value = false;
-  }
+const handleDownloadBackup = () => {
+  const token = localStorage.getItem("jupiter_access_token") || "";
+  const downloadUrl = `/api/bond/backup/download?token=${encodeURIComponent(token)}`;
+  
+  const link = document.createElement("a");
+  link.href = downloadUrl;
+  link.setAttribute("download", "");
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
 };
 
 const triggerSqlFileInput = () => {

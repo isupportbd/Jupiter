@@ -13,6 +13,13 @@ export async function authMiddleware(c: Context, next: Next) {
     }
   }
 
+  if (!accessToken) {
+    const queryToken = c.req.query("token");
+    if (queryToken) {
+      accessToken = queryToken.trim();
+    }
+  }
+
   if (accessToken) {
     const accessPayload = await jwt.verifyToken(accessToken, "access");
 
