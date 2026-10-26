@@ -70,6 +70,7 @@ export async function syncDatabaseSchemaAndSuperAdmin() {
 
     await executeSingleSql(`
       ALTER TABLE users ADD COLUMN IF NOT EXISTS admin_id INTEGER REFERENCES users(id) ON UPDATE CASCADE ON DELETE CASCADE;
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS phone VARCHAR(50);
       ALTER TABLE users ADD COLUMN IF NOT EXISTS status VARCHAR(50) NOT NULL DEFAULT 'pending';
       ALTER TABLE users ADD COLUMN IF NOT EXISTS subscription_expires_at TIMESTAMP WITH TIME ZONE;
       ALTER TABLE users ADD COLUMN IF NOT EXISTS billing_cycle_days INTEGER NOT NULL DEFAULT 30;
@@ -81,6 +82,16 @@ export async function syncDatabaseSchemaAndSuperAdmin() {
       CREATE INDEX IF NOT EXISTS idx_users_admin_id ON users(admin_id);
       CREATE INDEX IF NOT EXISTS idx_users_status ON users(status);
       CREATE INDEX IF NOT EXISTS idx_users_subscription ON users(subscription_expires_at);
+
+      -- Migration safeguard: Ensure any pre-existing users without a status or email-verified are marked 'active'
+      -- so deployment doesn't lock out existing office admins and operators
+      UPDATE users SET status = 'active' WHERE status IS NULL;
+
+      -- Ensure existing admin has an active subscription (365 days) if not already set
+      UPDATE users 
+      SET subscription_expires_at = COALESCE(subscription_expires_at, NOW() + INTERVAL '365 days')
+      WHERE role_id IN (SELECT id FROM roles WHERE name IN ('admin', 'superadmin'))
+        AND subscription_expires_at IS NULL;
     `);
   } catch (uErr) {
     console.warn("[DB Users Columns Warning]", uErr);
@@ -185,16 +196,102 @@ export async function syncDatabaseSchemaAndSuperAdmin() {
       CREATE INDEX IF NOT EXISTS idx_bond_records_applicant ON bond_records(applicant_name);
       CREATE INDEX IF NOT EXISTS idx_bond_records_beneficiary ON bond_records(beneficiary_name);
       CREATE INDEX IF NOT EXISTS idx_bond_records_bond_license ON bond_records(bond_license);
+
+      -- Enable PostgreSQL Trigram extension for fast %search% operations
+      CREATE EXTENSION IF NOT EXISTS pg_trgm;
+
+      -- Composite indexes for user-scoped date sorting (prevents expensive in-memory sorts)
+      CREATE INDEX IF NOT EXISTS idx_bond_records_user_lc_sort ON bond_records(user_id, lc_date DESC, entry_date DESC, id DESC);
+      CREATE INDEX IF NOT EXISTS idx_bond_records_user_entry_sort ON bond_records(user_id, entry_date DESC, id DESC);
+      CREATE INDEX IF NOT EXISTS idx_bond_records_user_coalesce ON bond_records(user_id, COALESCE(entry_date, lc_date));
+
+      -- Add record_hash column for 31-column deterministic deduplication
+      ALTER TABLE bond_records ADD COLUMN IF NOT EXISTS record_hash TEXT;
+
+      -- Backfill record_hash for any existing legacy rows that have record_hash IS NULL
+      UPDATE bond_records
+      SET record_hash = encode(sha256(
+        convert_to(
+          concat_ws('|',
+            lower(trim(coalesce(bank_name, ''))),
+            lower(trim(coalesce(branch_name, ''))),
+            lower(trim(coalesce(ads_code, ''))),
+            lower(trim(coalesce(lc_year, ''))),
+            lower(trim(coalesce(lc_nature, ''))),
+            lower(trim(coalesce(lc_serial, ''))),
+            lower(trim(coalesce(lc_id, ''))),
+            lower(trim(coalesce(lc_value::text, ''))),
+            lower(trim(coalesce(currency, ''))),
+            lower(trim(coalesce(to_char(lc_date at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'), ''))),
+            lower(trim(coalesce(to_char(lc_expiry_date at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'), ''))),
+            lower(trim(coalesce(bb_usanse_period, ''))),
+            lower(trim(coalesce(to_char(last_ship_date at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'), ''))),
+            lower(trim(coalesce(to_char(proceeds_date at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'), ''))),
+            lower(trim(coalesce(applicant_name, ''))),
+            lower(trim(coalesce(irc, ''))),
+            lower(trim(coalesce(exporter_info, ''))),
+            lower(trim(coalesce(export_lc_number, ''))),
+            lower(trim(coalesce(beneficiary_bank, ''))),
+            lower(trim(coalesce(beneficiary_branch, ''))),
+            lower(trim(coalesce(beneficiary_name, ''))),
+            lower(trim(coalesce(beneficiary_address, ''))),
+            lower(trim(coalesce(beneficiary_irc, ''))),
+            lower(trim(coalesce(beneficiary_erc, ''))),
+            lower(trim(coalesce(pi_number, ''))),
+            lower(trim(coalesce(to_char(pi_date at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'), ''))),
+            lower(trim(coalesce(bond_license, ''))),
+            lower(trim(coalesce(accepted, ''))),
+            lower(trim(coalesce(cancel_yn, ''))),
+            lower(trim(coalesce(cancel_cause, ''))),
+            lower(trim(coalesce(to_char(entry_date at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'), '')))
+          ),
+          'UTF8'
+        )
+      ), 'hex')
+      WHERE record_hash IS NULL;
+
+      -- If legacy data had identical duplicate rows, clean duplicates before creating UNIQUE index
+      DELETE FROM bond_records a USING bond_records b
+      WHERE a.id > b.id AND a.record_hash IS NOT NULL AND a.record_hash = b.record_hash;
+
+      -- Drop overly-narrow 5-column index to ensure no valid distinct rows are ever dropped
+      DROP INDEX IF EXISTS idx_bond_records_dedup;
+
+      -- 31-Column Full Row Cryptographic Unique Index: Drops duplicate ONLY if all 31 business fields are identical
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_bond_records_record_hash ON bond_records(record_hash);
+
+      -- Office-wide composite date sorting and grouping indexes
+      CREATE INDEX IF NOT EXISTS idx_bond_records_global_lc_sort ON bond_records(lc_date DESC, entry_date DESC, id DESC);
+      CREATE INDEX IF NOT EXISTS idx_bond_records_global_entry_sort ON bond_records(entry_date DESC, id DESC);
+      CREATE INDEX IF NOT EXISTS idx_bond_records_global_coalesce ON bond_records(COALESCE(entry_date, lc_date));
+      CREATE INDEX IF NOT EXISTS idx_bond_records_global_bank ON bond_records(bank_name);
+      CREATE INDEX IF NOT EXISTS idx_bond_records_global_lc_id ON bond_records(lc_id);
+
+      -- GIN Trigram indexes on all searched columns for instant substring matching (eliminates full table scans)
+      CREATE INDEX IF NOT EXISTS idx_bond_trgm_beneficiary ON bond_records USING gin (beneficiary_name gin_trgm_ops);
+      CREATE INDEX IF NOT EXISTS idx_bond_trgm_applicant ON bond_records USING gin (applicant_name gin_trgm_ops);
+      CREATE INDEX IF NOT EXISTS idx_bond_trgm_lc_id ON bond_records USING gin (lc_id gin_trgm_ops);
+      CREATE INDEX IF NOT EXISTS idx_bond_trgm_bank ON bond_records USING gin (bank_name gin_trgm_ops);
+      CREATE INDEX IF NOT EXISTS idx_bond_trgm_branch ON bond_records USING gin (branch_name gin_trgm_ops);
+      CREATE INDEX IF NOT EXISTS idx_bond_trgm_export_lc ON bond_records USING gin (export_lc_number gin_trgm_ops);
+      CREATE INDEX IF NOT EXISTS idx_bond_trgm_pi_number ON bond_records USING gin (pi_number gin_trgm_ops);
+      CREATE INDEX IF NOT EXISTS idx_bond_trgm_exporter ON bond_records USING gin (exporter_info gin_trgm_ops);
+      CREATE INDEX IF NOT EXISTS idx_bond_trgm_ben_bank ON bond_records USING gin (beneficiary_bank gin_trgm_ops);
+      CREATE INDEX IF NOT EXISTS idx_bond_trgm_ben_branch ON bond_records USING gin (beneficiary_branch gin_trgm_ops);
+      CREATE INDEX IF NOT EXISTS idx_bond_trgm_ben_addr ON bond_records USING gin (beneficiary_address gin_trgm_ops);
+      CREATE INDEX IF NOT EXISTS idx_bond_trgm_bond_lic ON bond_records USING gin (bond_license gin_trgm_ops);
     `);
   } catch (bErr) {
     console.warn("[DB Bond Records Columns Warning]", bErr);
   }
 
-  // 5. Dynamic SuperAdmin Account Setup from .env
+  // 5. Dynamic SuperAdmin Account Setup from .env (only created if no superadmin exists)
   try {
-    const superadminEmail = (process.env.ADMIN_EMAIL || process.env.SUPERADMIN_EMAIL || "isupportbd.info@gmail.com").trim().toLowerCase();
-    const superadminPassword = process.env.ADMIN_PASSWORD || process.env.SUPERADMIN_PASSWORD || "12345678";
-    const superadminName = process.env.ADMIN_NAME || process.env.SUPERADMIN_NAME || "Super Admin";
+    const rawEmail = process.env.ADMIN_EMAIL || process.env.SUPERADMIN_EMAIL;
+    const rawPassword = process.env.ADMIN_PASSWORD || process.env.SUPERADMIN_PASSWORD;
+    const superadminEmail = rawEmail ? rawEmail.trim().toLowerCase() : "";
+    const superadminPassword = rawPassword ? rawPassword.trim() : "";
+    const superadminName = (process.env.ADMIN_NAME || process.env.SUPERADMIN_NAME || "Super Admin").trim();
 
     if (superadminEmail && superadminPassword) {
       let [superadminRole] = await db.select().from(roles).where(eq(roles.name, "superadmin")).limit(1);
@@ -208,27 +305,23 @@ export async function syncDatabaseSchemaAndSuperAdmin() {
         }
       }
 
-      const hashedPassword = await bcrypt.hash(superadminPassword, 10);
       const existingAdmin = await db.select().from(users).where(sql`lower(${users.email}) = ${superadminEmail}`).limit(1);
-
-      // Set subscription far into future for SuperAdmin (10 years)
       const tenYearsLater = new Date(Date.now() + 10 * 365 * 24 * 60 * 60 * 1000);
-
       let adminUserId: number;
 
       if (existingAdmin.length > 0) {
         adminUserId = existingAdmin[0].id;
-        await db.update(users).set({
-          name: superadminName,
-          email: superadminEmail,
-          password: hashedPassword,
-          roleId: superadminRole?.id || existingAdmin[0].roleId,
-          status: "active",
-          subscriptionExpiresAt: tenYearsLater,
-          emailVerifiedAt: new Date(),
-          updatedAt: new Date()
-        }).where(eq(users.id, existingAdmin[0].id));
+        // Do NOT overwrite existing password or credentials; only ensure role and active status
+        if (existingAdmin[0].roleId !== superadminRole?.id || existingAdmin[0].status !== "active") {
+          await db.update(users).set({
+            roleId: superadminRole?.id || existingAdmin[0].roleId,
+            status: "active",
+            updatedAt: new Date()
+          }).where(eq(users.id, existingAdmin[0].id));
+        }
+        console.log(`[SuperAdmin Sync] SuperAdmin account verified: ${superadminEmail}`);
       } else {
+        const hashedPassword = await bcrypt.hash(superadminPassword, 10);
         const [inserted] = await db.insert(users).values({
           name: superadminName,
           email: superadminEmail,
@@ -241,14 +334,13 @@ export async function syncDatabaseSchemaAndSuperAdmin() {
           updatedAt: new Date()
         }).returning();
         adminUserId = inserted.id;
+        console.log(`[SuperAdmin Sync] SuperAdmin account bootstrapped: ${superadminEmail}`);
       }
 
       // Assign orphaned bond_records without user_id to adminUserId
       if (adminUserId) {
         await executeSingleSql(`UPDATE bond_records SET user_id = ${adminUserId} WHERE user_id IS NULL;`);
       }
-
-      console.log(`[SuperAdmin Sync] SuperAdmin account ready & synced: ${superadminEmail}`);
     }
   } catch (adminErr) {
     console.error("[SuperAdmin Sync Error]", adminErr);

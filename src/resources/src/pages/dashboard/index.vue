@@ -4,16 +4,18 @@ import { useRouter } from "vue-router";
 import { useAuthStore } from "@/stores/auth";
 import OperatorManagementModal from "@/components/OperatorManagementModal.vue";
 import axios from "axios";
-import * as XLSX from "xlsx";
+import ExcelJS from "exceljs";
 
 const router = useRouter();
 const authStore = useAuthStore();
 
 const isSubscriptionExpired = computed(() => {
-  const roleName = String((authStore.user as any)?.role?.name || (authStore.user as any)?.role || "").toLowerCase();
+  const user = authStore.user as any;
+  const roleName = String(user?.role?.name || user?.role || "").toLowerCase();
   const isAdmin = roleName === "superadmin" || roleName === "admin";
   if (isAdmin) return false;
-  return Number((authStore.user as any)?.daysRemaining || 0) <= 0;
+  if (user?.isSubscriptionActive !== undefined) return !user.isSubscriptionActive;
+  return Number(user?.daysRemaining || 0) <= 0;
 });
 
 const isOperator = computed(() => {
@@ -68,18 +70,6 @@ function parseExcelDate(val: any): string | undefined {
   if (val === null || val === undefined || val === "") return undefined;
 
   if (typeof val === "number") {
-    try {
-      if ((XLSX as any)?.SSF?.parse_date_code) {
-        const parsed = (XLSX as any).SSF.parse_date_code(val);
-        if (parsed && parsed.y && parsed.m && parsed.d) {
-          const y = String(parsed.y).padStart(4, "0");
-          const m = String(parsed.m).padStart(2, "0");
-          const d = String(parsed.d).padStart(2, "0");
-          return `${y}-${m}-${d}`;
-        }
-      }
-    } catch (_) {}
-
     const date = new Date(Math.round((val - 25569) * 86400 * 1000));
     if (!isNaN(date.getTime())) {
       const y = date.getUTCFullYear();
@@ -203,14 +193,36 @@ const handlePreview = async () => {
 
   try {
     const buffer = await selectedFile.value.arrayBuffer();
-    const workbook = XLSX.read(buffer, { type: "array", cellDates: true });
-    const firstSheetName = workbook.SheetNames[0];
-    if (!firstSheetName) {
-      throw new Error("No sheets found in the uploaded workbook.");
-    }
+    const isCsv = selectedFile.value.name.toLowerCase().endsWith(".csv");
+    let rawRows: any[][] = [];
 
-    const worksheet = workbook.Sheets[firstSheetName];
-    const rawRows = XLSX.utils.sheet_to_json(worksheet, { header: 1, raw: true }) as any[][];
+    if (isCsv) {
+      const text = await selectedFile.value.text();
+      const lines = text.split(/\r?\n/).filter((l) => l.trim().length > 0);
+      rawRows = lines.map((line) => {
+        const matches = line.match(/(".*?"|[^",]+)(?=\s*,|\s*$)/g);
+        return matches ? matches.map((m) => m.replace(/^"|"$/g, "").trim()) : line.split(",").map((s) => s.trim());
+      });
+    } else {
+      const workbook = new ExcelJS.Workbook();
+      await workbook.xlsx.load(buffer);
+      const worksheet = workbook.worksheets[0];
+      if (!worksheet) {
+        throw new Error("No sheets found in the uploaded workbook.");
+      }
+      worksheet.eachRow({ includeEmpty: false }, (row) => {
+        const values = Array.isArray(row.values) ? row.values.slice(1) : [];
+        const cleanValues = values.map((val: any) => {
+          if (val && typeof val === "object") {
+            if (val instanceof Date) return val;
+            if ("result" in val) return val.result;
+            if ("text" in val) return val.text;
+          }
+          return val;
+        });
+        rawRows.push(cleanValues);
+      });
+    }
 
     if (!rawRows || rawRows.length === 0) {
       throw new Error("The selected file is empty.");

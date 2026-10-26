@@ -6,7 +6,8 @@
  *      before a new account can log in.
  */
 export const authConfig = {
-  requireEmailVerification: false
+  requireEmailVerification: process.env.AUTH_REQUIRE_EMAIL_VERIFICATION === "true",
+  requireLoginOtp: process.env.AUTH_REQUIRE_LOGIN_OTP === "true"
 };
 
 export type AuthConfig = typeof authConfig;

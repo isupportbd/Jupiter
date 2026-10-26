@@ -132,6 +132,19 @@ function createFailingOverStore() {
   };
 }
 
+function getClientIp(c: any): string {
+  const cfIp = c.req.header("cf-connecting-ip");
+  if (cfIp) return cfIp.trim();
+  const realIp = c.req.header("x-real-ip");
+  if (realIp) return realIp.trim();
+  const forwarded = c.req.header("x-forwarded-for");
+  if (forwarded) {
+    const first = forwarded.split(",")[0]?.trim();
+    if (first) return first;
+  }
+  return "unknown";
+}
+
 let middleware: MiddlewareHandler | null = null;
 
 export const rateLimiterMiddleware = async (c: Context, next: Next) => {
@@ -142,7 +155,7 @@ export const rateLimiterMiddleware = async (c: Context, next: Next) => {
       keyGenerator: (c: any) => {
         const sessionId = c.get("sessionId");
         if (sessionId) return `session:${sessionId}`;
-        return c.req.header("x-forwarded-for") ?? "unknown";
+        return getClientIp(c);
       },
       store: createFailingOverStore(),
       standardHeaders: "draft-6"
@@ -160,8 +173,7 @@ export const loginLimiter = async (c: Context, next: Next) => {
       windowMs: rateLimitConfig.windowMs,
       limit: rateLimitConfig.loginMaxRequests,
       keyGenerator: (c: any) => {
-        const ip = c.req.header("x-forwarded-for") ?? "unknown";
-        return `login:${ip}`;
+        return `login:${getClientIp(c)}`;
       },
       store: createFailingOverStore(),
       standardHeaders: "draft-6"

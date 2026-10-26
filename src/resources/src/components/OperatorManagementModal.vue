@@ -46,11 +46,14 @@ const operatorToDelete = ref<OperatorItem | null>(null);
 const toastMessage = ref<string | null>(null);
 const toastType = ref<"success" | "danger">("success");
 
+let toastTimer: any = null;
 const triggerToast = (msg: string, type: "success" | "danger" = "success") => {
+  if (toastTimer) clearTimeout(toastTimer);
   toastMessage.value = msg;
   toastType.value = type;
-  setTimeout(() => {
+  toastTimer = setTimeout(() => {
     toastMessage.value = null;
+    toastTimer = null;
   }, 4000);
 };
 

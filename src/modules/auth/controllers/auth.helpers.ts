@@ -3,6 +3,7 @@ import { and, desc, eq, gt } from "drizzle-orm";
 import { jwtConfig } from "@/config/index.js";
 import { cookie, db, jwt } from "@/framework/facade.js";
 import { otpVerifications, refreshTokens, users } from "@/modules/auth/database/models/user.js";
+import { roles } from "@/modules/auth/database/models/role.js";
 
 export function sanitizeUser(user: any) {
   if (!user) return null;
@@ -12,17 +13,17 @@ export function sanitizeUser(user: any) {
   let isSubscriptionActive = false;
 
   const roleName = String(user.role?.name || user.role || "").toLowerCase();
-  const isSuperOrAdmin = roleName === "superadmin" || roleName === "admin";
+  const isSuperAdmin = roleName === "superadmin";
   const isOperator = Boolean(user.adminId) || roleName === "operator";
 
-  if (isSuperOrAdmin) {
+  if (isSuperAdmin) {
     daysRemaining = 9999;
     isSubscriptionActive = true;
   } else if (user.subscriptionExpiresAt) {
     const diff = new Date(user.subscriptionExpiresAt).getTime() - Date.now();
     daysRemaining = Math.max(0, Math.ceil(diff / (1000 * 60 * 60 * 24)));
     isSubscriptionActive = diff > 0 && user.status === "active";
-  } else if (isOperator && user.parent?.subscriptionExpiresAt) {
+  } else if (user.parent?.subscriptionExpiresAt) {
     const diff = new Date(user.parent.subscriptionExpiresAt).getTime() - Date.now();
     daysRemaining = Math.max(0, Math.ceil(diff / (1000 * 60 * 60 * 24)));
     isSubscriptionActive = diff > 0 && user.parent.status === "active";
@@ -66,10 +67,9 @@ export async function getCurrentUser(auth: any) {
   if (!auth?.id) return null;
   return db.query.users.findFirst({
     where: eq(users.id, Number(auth.id)),
-    with: { role: true },
+    with: { role: true, parent: true },
     columns: {
-      password: false,
-      rememberToken: false,
+      password: false
     }
   });
 }
@@ -243,7 +243,7 @@ export async function issueTokens(c: any, user: any, options?: { remember?: bool
     await db.insert(refreshTokens).values({
       userId: user.id,
       jti: refreshToken.jti,
-      revoked: 0,
+      revoked: false,
       expiresAt: new Date(refreshToken.exp * 1000)
     });
   }
@@ -253,3 +253,81 @@ export async function issueTokens(c: any, user: any, options?: { remember?: bool
 
   return { accessToken: accessToken.token, refreshToken: refreshToken.token };
 }
+
+/**
+ * Validates subscription status based on user role and hierarchy:
+ * - SuperAdmin: Unlimited access, never expires
+ * - Admin (Office Admin): Requires active subscriptionExpiresAt. If expired, must contact SuperAdmin.
+ * - User / Operator: Governed by the Office Admin's subscription. If Admin's subscription is expired,
+ *   login / access is denied with the prompt: "সাবস্ক্রিপশনের মেয়াদ শেষ। অ্যাডমিনের সাথে যোগাযোগ করুন। অ্যাডমিনের মোবাইল: ..."
+ */
+export async function checkUserSubscriptionStatus(user: any): Promise<{
+  expired: boolean;
+  message?: string;
+  adminPhone?: string | null;
+  adminName?: string | null;
+}> {
+  if (!user) return { expired: false };
+
+  const roleName = String(user.role?.name || user.role || "").toLowerCase();
+
+  // SuperAdmin is exempt (Platform Owner)
+  if (roleName === "superadmin") {
+    return { expired: false };
+  }
+
+  const now = Date.now();
+
+  // Office Administrator
+  if (roleName === "admin") {
+    const isExpired = !user.subscriptionExpiresAt || new Date(user.subscriptionExpiresAt).getTime() <= now;
+    if (isExpired) {
+      return {
+        expired: true,
+        message: "আপনার অ্যাকাউন্টের সাবস্ক্রিপশনের মেয়াদ শেষ হয়ে গেছে। দয়া করে সুপার অ্যাডমিনের সাথে যোগাযোগ করে রিনিউ করুন।"
+      };
+    }
+    return { expired: false };
+  }
+
+  // Regular Users / Operators: check their Office Admin's subscription
+  let officeAdmin: any = user.parent || null;
+  if (!officeAdmin && user.adminId) {
+    officeAdmin = await db.query.users.findFirst({
+      where: eq(users.id, Number(user.adminId))
+    });
+  }
+
+  if (!officeAdmin) {
+    const adminRole = await db.query.roles.findFirst({
+      where: eq(roles.name, "admin")
+    });
+    if (adminRole) {
+      officeAdmin = await db.query.users.findFirst({
+        where: eq(users.roleId, adminRole.id)
+      });
+    }
+  }
+
+  const isOfficeAdminExpired = officeAdmin
+    ? (!officeAdmin.subscriptionExpiresAt || new Date(officeAdmin.subscriptionExpiresAt).getTime() <= now)
+    : false;
+
+  const isUserExpired = Boolean(user.subscriptionExpiresAt && new Date(user.subscriptionExpiresAt).getTime() <= now);
+
+  if (isOfficeAdminExpired || isUserExpired) {
+    const adminPhone = officeAdmin?.phone ? officeAdmin.phone.trim() : "";
+    const phonePart = adminPhone ? `অ্যাডমিনের মোবাইল: ${adminPhone}` : "অ্যাডমিনের সাথে দ্রুত যোগাযোগ করুন।";
+    const msg = `সাবস্ক্রিপশনের মেয়াদ শেষ। অ্যাডমিনের সাথে যোগাযোগ করুন। ${phonePart}`.trim();
+
+    return {
+      expired: true,
+      message: msg,
+      adminPhone: adminPhone || null,
+      adminName: officeAdmin?.name || null
+    };
+  }
+
+  return { expired: false };
+}
+

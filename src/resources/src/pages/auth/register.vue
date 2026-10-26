@@ -37,9 +37,11 @@
           <div class="pending-icon-wrap mb-3">
             <i class="bi bi-hourglass-split"></i>
           </div>
-          <h4 class="fw-bold text-white mb-2">Registration Submitted!</h4>
           <p class="text-secondary small mb-4 px-2">
-            Your email <strong class="text-light">{{ email }}</strong> has been verified. Your account is currently awaiting approval by the Administrator. Once approved, your 30-day billing cycle will begin.
+            Your email <strong class="text-light">{{ email }}</strong> has been verified. 
+            {{ role === 'admin'
+                ? 'Your Office Admin account has been submitted and is awaiting approval by the SuperAdmin.'
+                : 'Your account has been submitted and is awaiting approval by the Office Administrator.' }}
           </p>
 
           <router-link to="/login" class="btn-submit text-decoration-none">
@@ -141,6 +143,19 @@
           </div>
 
           <div class="field-group">
+            <label class="field-label">Mobile Number (মোবাইল নম্বর)</label>
+            <div class="field-wrap">
+              <span class="field-icon"><i class="bi bi-telephone-fill"></i></span>
+              <input
+                v-model="phone"
+                type="tel"
+                class="login-input"
+                placeholder="e.g. 01712345678" />
+            </div>
+            <div class="field-hint">Required for account verification & subscription contact</div>
+          </div>
+
+          <div class="field-group">
             <label class="field-label">Password</label>
             <div class="field-wrap">
               <span class="field-icon"><i class="bi bi-lock-fill"></i></span>
@@ -183,9 +198,23 @@
             </div>
           </div>
 
+          <div class="field-group">
+            <label class="field-label">Account Role</label>
+            <div class="field-wrap">
+              <span class="field-icon"><i class="bi bi-person-badge-fill"></i></span>
+              <select v-model="role" class="login-input text-white" style="background-color: #0f172a;">
+                <option value="user" style="background: #0f172a; color: #fff;">Office User (Approved by Admin)</option>
+                <option value="admin" style="background: #0f172a; color: #fff;">Office Admin (Approved by SuperAdmin)</option>
+              </select>
+            </div>
+            <div class="field-hint">
+              {{ role === 'admin' ? 'Office Administrator account. Requires SuperAdmin approval.' : 'Standard office user. Requires Office Admin approval.' }}
+            </div>
+          </div>
+
           <div class="approval-notice">
             <i class="bi bi-shield-check"></i>
-            <span>New accounts are verified via Email OTP and approved by Admin for 30-day access.</span>
+            <span>{{ role === 'admin' ? 'Admin signups are reviewed and approved directly by SuperAdmin.' : 'User signups are reviewed and approved by the Office Admin.' }}</span>
           </div>
 
           <button
@@ -222,6 +251,8 @@ const toast = useToast();
 
 const name = ref("");
 const email = ref("");
+const phone = ref("");
+const role = ref<"user" | "admin">("user");
 const password = ref("");
 const passwordConfirmation = ref("");
 const showPassword = ref(false);
@@ -296,19 +327,26 @@ async function onRegisterSubmit() {
     const res = await auth.register({
       name: name.value.trim(),
       email: email.value.trim(),
+      phone: phone.value.trim() || undefined,
       password: password.value,
-      password_confirmation: passwordConfirmation.value
+      password_confirmation: passwordConfirmation.value,
+      role: role.value
     });
 
-    currentStep.value = 2;
-    otpCode.value = "";
-    toast.success(res.message || "A 6-digit verification code has been sent to your email.");
-    startCountdown();
-    startResendCooldown();
+    if (res?.requireOtp) {
+      currentStep.value = 2;
+      otpCode.value = "";
+      toast.success(res.message || "A 6-digit verification code has been sent to your email.");
+      startCountdown();
+      startResendCooldown();
 
-    nextTick(() => {
-      otpInputRef.value?.focus();
-    });
+      nextTick(() => {
+        otpInputRef.value?.focus();
+      });
+    } else {
+      currentStep.value = 3;
+      toast.success(res.message || "Registration successful! Your account is awaiting Administrator approval.");
+    }
   } catch (err: any) {
     toast.error(err.message || "Failed to initiate registration.");
   } finally {

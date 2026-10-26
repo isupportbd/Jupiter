@@ -70,6 +70,15 @@ axios.interceptors.response.use(
         localStorage.removeItem("jupiter_refresh_token");
         localStorage.removeItem("jupiter_auth_user");
       } catch {}
+
+      try {
+        if (typeof navigator !== "undefined" && navigator.sendBeacon) {
+          navigator.sendBeacon("/api/auth/logout");
+        } else {
+          fetch("/api/auth/logout", { method: "POST", credentials: "include" }).catch(() => {});
+        }
+      } catch {}
+
       const redirect = encodeURIComponent(window.location.pathname + window.location.search + window.location.hash);
       window.location.href = `/login?redirect=${redirect}`;
     }

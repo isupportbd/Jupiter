@@ -8,8 +8,10 @@ type VerifyLoginOtpPayload = { email: string; otp: string; remember?: boolean };
 type RegisterPayload = {
   name: string;
   email: string;
+  phone?: string;
   password: string;
   password_confirmation: string;
+  role?: "user" | "admin";
 };
 type VerifySignupOtpPayload = { email: string; otp: string };
 type ResendOtpPayload = { email: string; type: "signup" | "login" | "reset_password" };
@@ -27,6 +29,8 @@ type ApiResponse<T> = {
   isPendingApproval?: boolean;
   isSuspended?: boolean;
   isSubscriptionExpired?: boolean;
+  adminPhone?: string | null;
+  adminName?: string | null;
   email?: string;
   success?: boolean;
 };
@@ -116,7 +120,7 @@ export const useAuthStore = defineStore("auth", () => {
         syncUser(null);
       }
     } catch (error: unknown) {
-      if (axios.isAxiosError(error) && error.response?.status === 401) {
+      if (axios.isAxiosError(error) && (error.response?.status === 401 || error.response?.status === 403)) {
         syncUser(null);
       }
     }

@@ -1,8 +1,56 @@
+import { createHash } from "node:crypto";
 import { and, desc, eq, gte, ilike, lte, or, sql } from "drizzle-orm";
 import type { Handler } from "hono";
 import { db, HttpStatusCodes } from "@/framework/facade.js";
 import { bondRecords } from "@/modules/bond/database/models/bond.js";
 import { users } from "@/modules/auth/database/models/user.js";
+
+/**
+ * Computes a deterministic SHA-256 cryptographic hash across all 31 business fields.
+ * Ensures that two rows are considered duplicates ONLY if all 31 columns are identical.
+ * If even a single column differs (e.g. value, date, branch, status), it is treated as a valid distinct record.
+ */
+function computeRecordHash(row: Record<string, any>): string {
+  const fields = [
+    row.bankName,
+    row.branchName,
+    row.adsCode,
+    row.lcYear,
+    row.lcNature,
+    row.lcSerial,
+    row.lcId,
+    row.lcValue,
+    row.currency,
+    row.lcDate instanceof Date ? row.lcDate.toISOString() : (row.lcDate || ""),
+    row.lcExpiryDate instanceof Date ? row.lcExpiryDate.toISOString() : (row.lcExpiryDate || ""),
+    row.bbUsansePeriod,
+    row.lastShipDate instanceof Date ? row.lastShipDate.toISOString() : (row.lastShipDate || ""),
+    row.proceedsDate instanceof Date ? row.proceedsDate.toISOString() : (row.proceedsDate || ""),
+    row.applicantName,
+    row.irc,
+    row.exporterInfo,
+    row.exportLcNumber,
+    row.beneficiaryBank,
+    row.beneficiaryBranch,
+    row.beneficiaryName,
+    row.beneficiaryAddress,
+    row.beneficiaryIrc,
+    row.beneficiaryErc,
+    row.piNumber,
+    row.piDate instanceof Date ? row.piDate.toISOString() : (row.piDate || ""),
+    row.bondLicense,
+    row.accepted,
+    row.cancelYn,
+    row.cancelCause,
+    row.entryDate instanceof Date ? row.entryDate.toISOString() : (row.entryDate || "")
+  ];
+
+  const normalized = fields
+    .map((v) => (v !== null && v !== undefined ? String(v).trim().toLowerCase() : ""))
+    .join("|");
+
+  return createHash("sha256").update(normalized).digest("hex");
+}
 
 /**
  * Helper to extract current authenticated user and permissions
@@ -11,7 +59,7 @@ function getAuthContext(c: any) {
   const auth = c.get("auth");
   const userId = auth?.id ? Number(auth.id) : null;
   const role = String(auth?.role || "").toLowerCase();
-  const isSuperOrAdmin = role === "superadmin" || role === "admin" || auth?.roleId === 1;
+  const isSuperOrAdmin = role === "superadmin" || role === "admin";
   const adminId = auth?.adminId !== undefined && auth?.adminId !== null ? Number(auth.adminId) : null;
   const isOperator = Boolean(adminId) || role === "operator";
   const tenantId = adminId || userId;
@@ -66,8 +114,14 @@ export const processUploadChunk: Handler = async (c: any) => {
     }
 
     if (!isSuperOrAdmin) {
-      const user = await db.query.users.findFirst({ where: eq(users.id, tenantId) });
-      if (!user?.subscriptionExpiresAt || new Date(user.subscriptionExpiresAt).getTime() <= Date.now()) {
+      const tenantUser = await db.query.users.findFirst({ where: eq(users.id, tenantId) });
+      if (!tenantUser || tenantUser.status !== "active") {
+        return c.json(
+          { message: "Account is not active or suspended. File upload is disabled." },
+          HttpStatusCodes.FORBIDDEN
+        );
+      }
+      if (!tenantUser.subscriptionExpiresAt || new Date(tenantUser.subscriptionExpiresAt).getTime() <= Date.now()) {
         return c.json(
           { message: "Your subscription has expired. File upload is disabled. Please contact the Administrator to renew." },
           HttpStatusCodes.FORBIDDEN
@@ -84,47 +138,65 @@ export const processUploadChunk: Handler = async (c: any) => {
       return c.json({ message: "No records found in payload" }, HttpStatusCodes.BAD_REQUEST);
     }
 
-    const rowsToInsert = records.map((r) => ({
-      userId: tenantId,
-      bankName: String(r.bankName || "Unknown Bank").trim(),
-      branchName: r.branchName ? String(r.branchName).trim() : null,
-      adsCode: r.adsCode ? String(r.adsCode).trim() : null,
-      lcYear: r.lcYear ? String(r.lcYear).trim() : null,
-      lcNature: r.lcNature ? String(r.lcNature).trim() : null,
-      lcSerial: r.lcSerial ? String(r.lcSerial).trim() : null,
-      lcId: r.lcId ? String(r.lcId).trim() : null,
-      lcValue: parseRecordNumeric(r.lcValue),
-      currency: r.currency ? String(r.currency).trim().toUpperCase() : "USD",
-      lcDate: parseRecordDate(r.lcDate),
-      lcExpiryDate: parseRecordDate(r.lcExpiryDate),
-      bbUsansePeriod: r.bbUsansePeriod ? String(r.bbUsansePeriod).trim() : null,
-      lastShipDate: parseRecordDate(r.lastShipDate),
-      proceedsDate: parseRecordDate(r.proceedsDate),
-      irc: r.irc ? String(r.irc).trim() : null,
-      exporterInfo: r.exporterInfo ? String(r.exporterInfo).trim() : null,
-      applicantName: r.applicantName ? String(r.applicantName).trim() : null,
-      exportLcNumber: r.exportLcNumber ? String(r.exportLcNumber).trim() : null,
-      beneficiaryBank: r.beneficiaryBank ? String(r.beneficiaryBank).trim() : null,
-      beneficiaryBranch: r.beneficiaryBranch ? String(r.beneficiaryBranch).trim() : null,
-      beneficiaryName: r.beneficiaryName ? String(r.beneficiaryName).trim() : null,
-      beneficiaryAddress: r.beneficiaryAddress ? String(r.beneficiaryAddress).trim() : null,
-      beneficiaryIrc: r.beneficiaryIrc ? String(r.beneficiaryIrc).trim() : null,
-      beneficiaryErc: r.beneficiaryErc ? String(r.beneficiaryErc).trim() : null,
-      piNumber: r.piNumber ? String(r.piNumber).trim() : null,
-      piDate: parseRecordDate(r.piDate),
-      bondLicense: r.bondLicense ? String(r.bondLicense).trim() : null,
-      accepted: r.accepted ? String(r.accepted).trim() : null,
-      cancelYn: r.cancelYn ? String(r.cancelYn).trim().toUpperCase() : "N",
-      cancelCause: r.cancelCause ? String(r.cancelCause).trim() : null,
-      entryDate: parseRecordDate(r.entryDate)
-    }));
+    const rowsToInsert = records.map((r) => {
+      const parsedRow = {
+        userId: Number(userId),
+        bankName: String(r.bankName || "Unknown Bank").trim(),
+        branchName: r.branchName ? String(r.branchName).trim() : null,
+        adsCode: r.adsCode ? String(r.adsCode).trim() : null,
+        lcYear: r.lcYear ? String(r.lcYear).trim() : null,
+        lcNature: r.lcNature ? String(r.lcNature).trim() : null,
+        lcSerial: r.lcSerial ? String(r.lcSerial).trim() : null,
+        lcId: r.lcId ? String(r.lcId).trim() : null,
+        lcValue: parseRecordNumeric(r.lcValue),
+        currency: r.currency ? String(r.currency).trim().toUpperCase() : "USD",
+        lcDate: parseRecordDate(r.lcDate),
+        lcExpiryDate: parseRecordDate(r.lcExpiryDate),
+        bbUsansePeriod: r.bbUsansePeriod ? String(r.bbUsansePeriod).trim() : null,
+        lastShipDate: parseRecordDate(r.lastShipDate),
+        proceedsDate: parseRecordDate(r.proceedsDate),
+        irc: r.irc ? String(r.irc).trim() : null,
+        exporterInfo: r.exporterInfo ? String(r.exporterInfo).trim() : null,
+        applicantName: r.applicantName ? String(r.applicantName).trim() : null,
+        exportLcNumber: r.exportLcNumber ? String(r.exportLcNumber).trim() : null,
+        beneficiaryBank: r.beneficiaryBank ? String(r.beneficiaryBank).trim() : null,
+        beneficiaryBranch: r.beneficiaryBranch ? String(r.beneficiaryBranch).trim() : null,
+        beneficiaryName: r.beneficiaryName ? String(r.beneficiaryName).trim() : null,
+        beneficiaryAddress: r.beneficiaryAddress ? String(r.beneficiaryAddress).trim() : null,
+        beneficiaryIrc: r.beneficiaryIrc ? String(r.beneficiaryIrc).trim() : null,
+        beneficiaryErc: r.beneficiaryErc ? String(r.beneficiaryErc).trim() : null,
+        piNumber: r.piNumber ? String(r.piNumber).trim() : null,
+        piDate: parseRecordDate(r.piDate),
+        bondLicense: r.bondLicense ? String(r.bondLicense).trim() : null,
+        accepted: r.accepted ? String(r.accepted).trim() : null,
+        cancelYn: r.cancelYn ? String(r.cancelYn).trim().toUpperCase() : "N",
+        cancelCause: r.cancelCause ? String(r.cancelCause).trim() : null,
+        entryDate: parseRecordDate(r.entryDate),
+        recordHash: ""
+      };
+      parsedRow.recordHash = computeRecordHash(parsedRow);
+      return parsedRow;
+    });
 
-    // Direct insertion into PostgreSQL in safe sub-batches of 500
-    const subBatchSize = 500;
-    for (let i = 0; i < rowsToInsert.length; i += subBatchSize) {
-      const subBatch = rowsToInsert.slice(i, i + subBatchSize);
-      await db.insert(bondRecords).values(subBatch);
+    // In-memory deduplication using full 31-column cryptographic hash (zero false positives)
+    const seenInChunk = new Set<string>();
+    const dedupedRows = [];
+    for (const row of rowsToInsert) {
+      if (!seenInChunk.has(row.recordHash)) {
+        seenInChunk.add(row.recordHash);
+        dedupedRows.push(row);
+      }
     }
+
+    // Direct insertion into PostgreSQL in safe sub-batches within an atomic transaction
+    // onConflictDoNothing avoids duplicate entries across users or repeat uploads
+    const subBatchSize = 500;
+    await db.transaction(async (tx) => {
+      for (let i = 0; i < dedupedRows.length; i += subBatchSize) {
+        const subBatch = dedupedRows.slice(i, i + subBatchSize);
+        await tx.insert(bondRecords).values(subBatch).onConflictDoNothing();
+      }
+    });
 
     return c.json({
       message: `Chunk ${chunkIndex}/${totalChunks} processed successfully`,
@@ -154,8 +226,7 @@ export const getSummary: Handler = async (c: any) => {
 
     const countResult = await db
       .select({ count: sql`count(*)` })
-      .from(bondRecords)
-      .where(eq(bondRecords.userId, tenantId));
+      .from(bondRecords);
     const totalRecords = Number(countResult[0]?.count || 0);
 
     return c.json({
@@ -175,9 +246,12 @@ export const getSummary: Handler = async (c: any) => {
  */
 export const getDatabaseStorageSize: Handler = async (c: any) => {
   try {
-    const { userId } = getAuthContext(c);
+    const { userId, isSuperOrAdmin } = getAuthContext(c);
     if (!userId) {
       return c.json({ message: "Unauthorized" }, HttpStatusCodes.UNAUTHORIZED);
+    }
+    if (!isSuperOrAdmin) {
+      return c.json({ message: "Access denied. Administrator privileges required." }, HttpStatusCodes.FORBIDDEN);
     }
 
     const result: any = await db.execute(
@@ -213,12 +287,23 @@ export const getDatabaseStorageSize: Handler = async (c: any) => {
  */
 export const getLocalLcReport: Handler = async (c: any) => {
   try {
-    const { userId, tenantId } = getAuthContext(c);
+    const { userId, tenantId, isSuperOrAdmin } = getAuthContext(c);
     if (!userId || !tenantId) {
       return c.json({ message: "Unauthorized" }, HttpStatusCodes.UNAUTHORIZED);
     }
 
     const isExport = c.req.query("export") === "true";
+
+    if (isExport && !isSuperOrAdmin) {
+      const tenantUser = await db.query.users.findFirst({ where: eq(users.id, tenantId) });
+      if (!tenantUser || tenantUser.status !== "active" || !tenantUser.subscriptionExpiresAt || new Date(tenantUser.subscriptionExpiresAt).getTime() <= Date.now()) {
+        return c.json(
+          { message: "Your subscription has expired. Report export is disabled." },
+          HttpStatusCodes.FORBIDDEN
+        );
+      }
+    }
+
     const page = Math.max(1, Number(c.req.query("page") || 1));
     const limit = isExport ? 50000 : Math.max(1, Math.min(100, Number(c.req.query("limit") || 10)));
     const offset = isExport ? 0 : (page - 1) * limit;
@@ -243,8 +328,8 @@ export const getLocalLcReport: Handler = async (c: any) => {
         .filter(Boolean);
     }
 
-    // Strictly enforce multi-tenant per-account data isolation
-    const conditions: any[] = [eq(bondRecords.userId, tenantId)];
+    // Office-wide shared records (visible to all authorized office users)
+    const conditions: any[] = [];
 
     // Global text search
     if (search) {
@@ -296,15 +381,10 @@ export const getLocalLcReport: Handler = async (c: any) => {
     // Count Total Matching Records & Sum LC Value
     const countQuery = db
       .select({
-        count: sql`count(*)`,
-        totalLcValue: sql`sum(case when lc_value is not null then cast(lc_value as numeric) else 0 end)`
+        count: sql<number>`count(*)`,
+        totalLcValue: sql<number>`COALESCE(SUM(${bondRecords.lcValue}), 0)`
       })
       .from(bondRecords);
-
-    const countResult = whereClause ? await countQuery.where(whereClause) : await countQuery;
-    const total = Number(countResult[0]?.count || 0);
-    const totalLcValue = Number(countResult[0]?.totalLcValue || 0);
-    const totalPages = isExport ? 1 : Math.ceil(total / limit) || 1;
 
     // Fetch Records with all columns
     const dataQuery = db
@@ -344,16 +424,29 @@ export const getLocalLcReport: Handler = async (c: any) => {
       })
       .from(bondRecords);
 
-    const records = whereClause
-      ? await dataQuery
+    // Execute count and paginated data queries in parallel
+    const countPromise = whereClause ? countQuery.where(whereClause) : countQuery;
+    const dataPromise = whereClause
+      ? dataQuery
           .where(whereClause)
           .orderBy(desc(bondRecords.lcDate), desc(bondRecords.entryDate), desc(bondRecords.id))
           .limit(limit)
           .offset(offset)
-      : await dataQuery
+      : dataQuery
           .orderBy(desc(bondRecords.lcDate), desc(bondRecords.entryDate), desc(bondRecords.id))
           .limit(limit)
           .offset(offset);
+
+    const [countResult, records] = await Promise.all([countPromise, dataPromise]);
+
+    const total = Number(countResult[0]?.count || 0);
+    const totalLcValue = Number(countResult[0]?.totalLcValue || 0);
+    const totalPages = isExport ? 1 : Math.ceil(total / limit) || 1;
+
+    const isTruncated = isExport && total > limit;
+    if (isTruncated) {
+      c.header("X-Data-Truncated", "true");
+    }
 
     return c.json({
       success: true,
@@ -363,7 +456,8 @@ export const getLocalLcReport: Handler = async (c: any) => {
         page,
         limit,
         totalPages,
-        totalLcValue
+        totalLcValue,
+        isTruncated
       }
     });
   } catch (error: any) {
@@ -385,30 +479,29 @@ export const getBeneficiaries: Handler = async (c: any) => {
 
     const search = c.req.query("search")?.trim();
     const whereConditions: any[] = [
-      eq(bondRecords.userId, tenantId),
-      sql`beneficiary_name is not null and length(trim(beneficiary_name)) > 1 and trim(beneficiary_name) !~ '^[.\\s,;:-]+$'`
+      sql`beneficiary_name is not null and length(trim(beneficiary_name)) > 1`
     ];
 
     if (search) {
       whereConditions.push(
-        sql`TRIM(beneficiary_name) ILIKE ${`%${search}%`}`
+        ilike(bondRecords.beneficiaryName, `%${search}%`)
       );
     }
 
+    // Index-friendly distinct selection
     const results = await db
-      .select({
-        name: sql<string>`regexp_replace(TRIM(beneficiary_name), '\\s+', ' ', 'g')`
+      .selectDistinct({
+        name: bondRecords.beneficiaryName
       })
       .from(bondRecords)
       .where(and(...whereConditions))
-      .groupBy(sql`regexp_replace(TRIM(beneficiary_name), '\\s+', ' ', 'g')`)
-      .orderBy(sql`regexp_replace(TRIM(beneficiary_name), '\\s+', ' ', 'g') ASC`)
+      .orderBy(bondRecords.beneficiaryName)
       .limit(100);
 
     const uniqueNames = Array.from(
       new Set(
         results
-          .map((r: any) => String(r.name || "").trim())
+          .map((r: any) => String(r.name || "").replace(/\s+/g, " ").trim())
           .filter((n: string) => n && n.length > 1 && !/^[.\s,;:-]+$/.test(n))
       )
     );
@@ -438,7 +531,6 @@ export const getMonthwiseSummary: Handler = async (c: any) => {
     const monthTo = (c.req.query("monthTo") || "").trim();
 
     const conditions: any[] = [
-      eq(bondRecords.userId, tenantId),
       sql`COALESCE(entry_date, lc_date) IS NOT NULL`
     ];
 
@@ -560,9 +652,22 @@ export const getMonthwiseSummary: Handler = async (c: any) => {
  */
 export const deleteMonthwiseRecords: Handler = async (c: any) => {
   try {
-    const { userId, tenantId } = getAuthContext(c);
+    const { userId, tenantId, isSuperOrAdmin } = getAuthContext(c);
     if (!userId || !tenantId) {
       return c.json({ message: "Unauthorized" }, HttpStatusCodes.UNAUTHORIZED);
+    }
+
+    if (!isSuperOrAdmin) {
+      const tenantUser = await db.query.users.findFirst({ where: eq(users.id, tenantId) });
+      if (!tenantUser || tenantUser.status !== "active") {
+        return c.json({ message: "Account is not active." }, HttpStatusCodes.FORBIDDEN);
+      }
+      if (!tenantUser.subscriptionExpiresAt || new Date(tenantUser.subscriptionExpiresAt).getTime() <= Date.now()) {
+        return c.json(
+          { message: "Your subscription has expired. Record deletion is disabled." },
+          HttpStatusCodes.FORBIDDEN
+        );
+      }
     }
 
     const body = await c.req.json();
@@ -576,7 +681,7 @@ export const deleteMonthwiseRecords: Handler = async (c: any) => {
       (m) => sql`TO_CHAR(COALESCE(${bondRecords.entryDate}, ${bondRecords.lcDate}), 'YYYY-MM') = ${m}`
     );
 
-    const deleteCondition = and(eq(bondRecords.userId, tenantId), or(...monthConditions));
+    const deleteCondition = or(...monthConditions);
 
     await db.delete(bondRecords).where(deleteCondition);
 

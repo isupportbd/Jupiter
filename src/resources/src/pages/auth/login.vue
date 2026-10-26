@@ -84,6 +84,7 @@ const resetOtp = ref("");
 const newPassword = ref("");
 const showNewPassword = ref(false);
 const isSendingOtp = ref(false);
+const subscriptionExpiredData = ref<{ message: string; adminPhone?: string | null; adminName?: string | null } | null>(null);
 
 const handleLogin = async () => {
   if (!loginId.value || !password.value) {
@@ -91,6 +92,7 @@ const handleLogin = async () => {
     return;
   }
   isSubmitting.value = true;
+  subscriptionExpiredData.value = null;
   try {
     const res = await authStore.login({
       email: loginId.value.trim(),
@@ -112,6 +114,13 @@ const handleLogin = async () => {
 
     completeLoginSuccess();
   } catch (err: any) {
+    if (err?.data?.isSubscriptionExpired) {
+      subscriptionExpiredData.value = {
+        message: err.data.message || err.message,
+        adminPhone: err.data.adminPhone,
+        adminName: err.data.adminName
+      };
+    }
     toast.error(err?.message || "Invalid email or password. Please check your credentials.");
   } finally {
     isSubmitting.value = false;
@@ -390,6 +399,37 @@ const handleResetPassword = async () => {
               <div class="form-step-badge">Secure System</div>
               <h2>Welcome back</h2>
               <p>Sign in to your dashboard</p>
+            </div>
+
+            <!-- Subscription Expired Alert Banner -->
+            <div
+              v-if="subscriptionExpiredData"
+              class="alert alert-danger p-3 rounded-3 mb-3 border-0 bg-danger bg-opacity-10 text-danger border border-danger border-opacity-25"
+              style="animation: fadeIn 0.3s ease-in-out;"
+            >
+              <div class="d-flex align-items-start gap-2">
+                <i class="bi bi-exclamation-octagon-fill fs-5 text-danger flex-shrink-0 mt-0.5"></i>
+                <div class="flex-grow-1">
+                  <div class="fw-bold mb-1">সাবস্ক্রিপশনের মেয়াদ শেষ!</div>
+                  <div class="small opacity-90 mb-2">{{ subscriptionExpiredData.message }}</div>
+                  <div
+                    v-if="subscriptionExpiredData.adminPhone"
+                    class="p-2 bg-dark bg-opacity-75 rounded font-monospace small text-white border border-secondary border-opacity-25 d-flex align-items-center justify-content-between"
+                  >
+                    <span>
+                      <i class="bi bi-telephone-fill text-warning me-1.5"></i>
+                      <strong>{{ subscriptionExpiredData.adminPhone }}</strong>
+                    </span>
+                    <a
+                      :href="`tel:${subscriptionExpiredData.adminPhone}`"
+                      class="btn btn-sm btn-outline-warning py-0 px-2 text-decoration-none"
+                      style="font-size: 0.75rem;"
+                    >
+                      <i class="bi bi-telephone me-1"></i> কল করুন
+                    </a>
+                  </div>
+                </div>
+              </div>
             </div>
 
             <form @submit.prevent="handleLogin" class="login-form">

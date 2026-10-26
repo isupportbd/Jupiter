@@ -1,5 +1,7 @@
 import { createRoute, z } from "@hono/zod-openapi";
+import { secureHeaders } from "hono/secure-headers";
 import { serveEmojiFavicon } from "stoker/middlewares";
+import { env } from "@/env.js";
 import { appConfig } from "@/config/index.js";
 import { corsMiddleware } from "@/framework/http/cors.js";
 import { loggerMiddleware, notFound, onError } from "@/framework/http/logger.js";
@@ -37,6 +39,10 @@ export function createHttpApp() {
   if (appConfig.openApiEnabled) {
     configureOpenApi(app);
     app.api(healthRoute, (c: any) => c.json({ message: "Application is healthy" }));
+  }
+
+  if (env.SECURITY_HEADERS) {
+    app.use("*", secureHeaders());
   }
 
   app.use("*", sessionMiddleware);

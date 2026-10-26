@@ -9,11 +9,13 @@ interface UserItem {
   id: number;
   name: string;
   email: string;
+  phone?: string | null;
   role: string;
   roleId?: number;
   adminId?: number | null;
   parentName?: string | null;
   parentEmail?: string | null;
+  parentPhone?: string | null;
   operatorsCount?: number;
   status: "pending" | "active" | "suspended" | "rejected";
   isExpired: boolean;
@@ -41,13 +43,30 @@ const summary = ref({
 // Feedback toast
 const toastMessage = ref<string | null>(null);
 const toastType = ref<"success" | "danger">("success");
+let toastTimeout: any = null;
 const showToast = (msg: string, type: "success" | "danger" = "success") => {
+  if (toastTimeout) clearTimeout(toastTimeout);
   toastMessage.value = msg;
   toastType.value = type;
-  setTimeout(() => {
+  toastTimeout = setTimeout(() => {
     toastMessage.value = null;
+    toastTimeout = null;
   }, 4000);
 };
+
+const isCurrentSuperAdmin = computed(() => {
+  const user = authStore.user as any;
+  const r = (user?.role?.name || user?.role || "").toLowerCase();
+  return r === "superadmin";
+});
+
+const isCurrentAdmin = computed(() => {
+  const user = authStore.user as any;
+  const r = (user?.role?.name || user?.role || "").toLowerCase();
+  return r === "admin" || r === "superadmin";
+});
+
+const currentUserId = computed(() => Number((authStore.user as any)?.id || 0));
 
 // Modals
 const showApproveModal = ref(false);
@@ -133,10 +152,18 @@ const setFilter = (status: string) => {
   fetchUsers();
 };
 
+const canApproveUser = (u: UserItem) => {
+  if (u.status !== "pending") return false;
+  if (isCurrentSuperAdmin.value) {
+    return u.role === "admin";
+  }
+  return u.role !== "admin" && u.role !== "superadmin";
+};
+
 // Approve Flow
 const openApproveModal = (u: UserItem) => {
   selectedUser.value = u;
-  approvalDays.value = 30;
+  approvalDays.value = u.role === "admin" ? 3650 : 30;
   showApproveModal.value = true;
 };
 
@@ -231,6 +258,38 @@ const confirmDelete = async () => {
     }
   } catch (err: any) {
     showToast(err.response?.data?.message || "Failed to delete user", "danger");
+  } finally {
+    isProcessingAction.value = false;
+  }
+};
+
+// Phone Edit Flow
+const showPhoneModal = ref(false);
+const phoneInput = ref("");
+
+const openPhoneModal = (u: UserItem) => {
+  selectedUser.value = u;
+  phoneInput.value = u.phone || "";
+  showPhoneModal.value = true;
+};
+
+const confirmUpdatePhone = async () => {
+  if (!selectedUser.value) return;
+  isProcessingAction.value = true;
+  try {
+    const token = localStorage.getItem("jupiter_access_token");
+    const res = await axios.post(
+      `/api/auth/admin/users/${selectedUser.value.id}/phone`,
+      { phone: phoneInput.value.trim() },
+      { headers: token ? { Authorization: `Bearer ${token}` } : undefined }
+    );
+    if (res.data?.success) {
+      showToast(res.data.message || "Phone number updated successfully");
+      showPhoneModal.value = false;
+      fetchUsers();
+    }
+  } catch (err: any) {
+    showToast(err.response?.data?.message || "Failed to update phone number", "danger");
   } finally {
     isProcessingAction.value = false;
   }
@@ -363,7 +422,7 @@ onMounted(() => {
               <th class="text-center" style="width: 110px;">Role</th>
               <th class="text-center" style="width: 160px;">Status</th>
               <th style="min-width: 220px;">30-Day Billing Cycle</th>
-              <th class="text-end" style="width: 120px;">Own Records</th>
+              <th class="text-end" style="width: 120px;">Uploaded Records</th>
               <th style="width: 130px;">Registered</th>
               <th class="pe-3 text-end" style="width: 180px;">Actions</th>
             </tr>
@@ -393,6 +452,9 @@ onMounted(() => {
                   <div class="d-flex flex-column">
                     <div class="user-name-text">{{ u.name }}</div>
                     <div class="user-email-text font-monospace">{{ u.email }}</div>
+                    <div v-if="u.phone" class="text-warning small font-monospace mt-0.5" style="font-size: 0.72rem;">
+                      <i class="bi bi-telephone-fill me-1"></i>{{ u.phone }}
+                    </div>
                   </div>
                 </div>
               </td>
@@ -448,9 +510,9 @@ onMounted(() => {
 
               <!-- 30-Day Billing Cycle -->
               <td>
-                <div v-if="u.role === 'superadmin' || u.role === 'admin'" class="d-flex align-items-center text-info small font-monospace">
+                <div v-if="u.role === 'superadmin'" class="d-flex align-items-center text-info small font-monospace">
                   <i class="bi bi-infinity fs-6 me-2"></i>
-                  <span>Unlimited Access</span>
+                  <span>Unlimited Access (Owner)</span>
                 </div>
                 <div v-else-if="u.status === 'pending'" class="text-warning-muted small font-monospace d-flex align-items-center">
                   <i class="bi bi-clock-history me-2 text-warning opacity-75"></i>
@@ -470,6 +532,9 @@ onMounted(() => {
                     >
                       <i :class="u.daysRemaining > 0 ? 'bi bi-clock-history me-1' : 'bi bi-x-circle me-1'"></i>
                       <span>{{ u.daysRemaining > 0 ? `${u.daysRemaining} Days Left` : 'Expired' }}</span>
+                    </span>
+                    <span v-if="u.role === 'admin'" class="badge bg-primary bg-opacity-25 text-info ms-2 font-monospace" style="font-size: 0.65rem;">
+                      Office Plan
                     </span>
                   </div>
                   <span class="text-muted font-monospace mt-0.5" style="font-size: 0.74rem;">
@@ -492,32 +557,49 @@ onMounted(() => {
               <!-- Actions -->
               <td class="pe-3 text-end">
                 <div class="d-inline-flex align-items-center gap-1.5">
-                  <!-- Approve Button (for pending users) -->
-                  <button
-                    v-if="u.status === 'pending'"
-                    type="button"
-                    class="btn-action-approve"
-                    title="Approve user and activate 30-day billing cycle"
-                    @click="openApproveModal(u)"
-                  >
-                    <i class="bi bi-check2"></i>
-                    <span>Approve (30d)</span>
-                  </button>
+                  <!-- Approve Button: SuperAdmin approves Admin; Admin approves User/Operator -->
+                  <template v-if="u.status === 'pending'">
+                    <button
+                      v-if="canApproveUser(u)"
+                      type="button"
+                      class="btn-action-approve"
+                      :title="u.role === 'admin' ? 'Approve Office Admin Account' : 'Approve user and activate 30-day billing cycle'"
+                      @click="openApproveModal(u)"
+                    >
+                      <i class="bi bi-check2"></i>
+                      <span>{{ u.role === 'admin' ? 'Approve Admin' : 'Approve (30d)' }}</span>
+                    </button>
+                    <span v-else class="text-muted font-monospace" style="font-size: 0.72rem;">
+                      {{ u.role === 'admin' ? 'Awaiting SuperAdmin' : 'Awaiting Admin' }}
+                    </span>
+                  </template>
 
                   <!-- Renew Button (for active/expired users) -->
                   <button
-                    v-if="u.status === 'active' && u.role !== 'superadmin'"
+                    v-if="u.status === 'active' && u.role !== 'superadmin' && (u.role !== 'admin' || isCurrentSuperAdmin)"
                     type="button"
                     class="btn-action-renew"
-                    title="Renew/extend billing cycle by +30 days"
+                    :title="u.role === 'admin' ? 'SuperAdmin: Renew Office Admin Billing (+30d)' : 'Renew/extend billing cycle by +30 days'"
                     @click="openRenewModal(u)"
                   >
                     <i class="bi bi-arrow-repeat"></i>
                     <span>Renew (+30d)</span>
                   </button>
 
+                  <!-- Edit Phone Button -->
+                  <button
+                    v-if="isCurrentSuperAdmin || (isCurrentAdmin && u.role !== 'superadmin') || u.id === currentUserId"
+                    type="button"
+                    class="btn-action-role"
+                    title="Edit Mobile Number"
+                    @click="openPhoneModal(u)"
+                  >
+                    <i class="bi bi-telephone"></i>
+                  </button>
+
                   <!-- Change Role Button -->
                   <button
+                    v-if="u.id !== currentUserId && (u.role !== 'superadmin' || isCurrentSuperAdmin)"
                     type="button"
                     class="btn-action-role"
                     title="Change Role (SuperAdmin, Admin, User, Operator)"
@@ -528,7 +610,7 @@ onMounted(() => {
 
                   <!-- Suspend/Activate toggle -->
                   <button
-                    v-if="u.status !== 'pending' && u.role !== 'superadmin'"
+                    v-if="u.status !== 'pending' && u.id !== currentUserId && (u.role !== 'superadmin' || isCurrentSuperAdmin)"
                     type="button"
                     :class="['btn-action-toggle', u.status === 'active' ? 'toggle-pause' : 'toggle-play']"
                     :title="u.status === 'active' ? 'Suspend User Access' : 'Activate User'"
@@ -539,7 +621,7 @@ onMounted(() => {
 
                   <!-- Delete Button -->
                   <button
-                    v-if="u.role !== 'superadmin'"
+                    v-if="u.id !== currentUserId && (u.role !== 'superadmin' || isCurrentSuperAdmin)"
                     type="button"
                     class="btn-action-delete"
                     title="Delete User and their data permanently"
@@ -564,8 +646,12 @@ onMounted(() => {
               <i class="bi bi-patch-check-fill fs-5"></i>
             </div>
             <div>
-              <h6 class="modal-title fw-bold text-white mb-0">Approve User Account</h6>
-              <span class="text-muted small">Grant access & activate 30-day billing cycle</span>
+              <h6 class="modal-title fw-bold text-white mb-0">
+                {{ selectedUser.role === 'admin' ? 'Approve Office Admin Account' : 'Approve User Account' }}
+              </h6>
+              <span class="text-muted small">
+                {{ selectedUser.role === 'admin' ? 'Grant administrator privileges to manage office users & data' : 'Grant access & activate 30-day billing cycle' }}
+              </span>
             </div>
           </div>
           <button type="button" class="btn-close btn-close-white" @click="showApproveModal = false"></button>
@@ -573,8 +659,15 @@ onMounted(() => {
 
         <div class="p-3.5">
           <div class="user-preview-box p-2.5 rounded mb-3">
-            <div class="fw-semibold text-white">{{ selectedUser.name }}</div>
-            <div class="text-muted small font-monospace">{{ selectedUser.email }}</div>
+            <div class="d-flex align-items-center justify-content-between">
+              <div>
+                <div class="fw-semibold text-white">{{ selectedUser.name }}</div>
+                <div class="text-muted small font-monospace">{{ selectedUser.email }}</div>
+              </div>
+              <span :class="selectedUser.role === 'admin' ? 'badge-role-admin' : 'badge-role-user'">
+                {{ selectedUser.role.toUpperCase() }}
+              </span>
+            </div>
           </div>
 
           <div class="mb-3">
@@ -604,8 +697,13 @@ onMounted(() => {
             </div>
           </div>
 
+          <div v-if="selectedUser.role === 'admin'" class="alert alert-info py-2 px-3 small font-monospace mb-3">
+            <i class="bi bi-shield-lock-fill me-1"></i>
+            Approving this account designates this user as the <strong>Office Admin</strong>. Office users will depend on this billing cycle.
+          </div>
+
           <p class="text-muted small mb-0">
-            Upon approval, user status will change to <strong class="text-success">Active</strong> and they will be able to log in and upload their own data for {{ approvalDays }} days.
+            Upon approval, user status will change to <strong class="text-success">Active</strong> and they will be able to log in immediately.
           </p>
         </div>
 
@@ -616,7 +714,7 @@ onMounted(() => {
           <button type="button" class="btn-modal-confirm-amber" :disabled="isProcessingAction" @click="confirmApprove">
             <span v-if="isProcessingAction" class="spinner-border spinner-border-sm me-1"></span>
             <i v-else class="bi bi-check2-circle me-1"></i>
-            <span>Confirm Approval ({{ approvalDays }} Days)</span>
+            <span>{{ selectedUser.role === 'admin' ? 'Confirm Admin Approval' : `Confirm Approval (${approvalDays} Days)` }}</span>
           </button>
         </div>
       </div>
@@ -710,7 +808,11 @@ onMounted(() => {
           <p class="text-light mb-2">
             Are you sure you want to permanently delete <strong class="text-white">{{ selectedUser.name }}</strong> (<span class="font-monospace text-muted">{{ selectedUser.email }}</span>)?
           </p>
-          <div class="alert alert-danger py-2 px-3 small mb-0 border-0" style="background: rgba(239, 68, 68, 0.12); color: #fca5a5;">
+          <div v-if="selectedUser.adminId" class="alert alert-warning py-2 px-3 small mb-0 border-0">
+            <i class="bi bi-info-circle-fill me-1 text-warning"></i>
+            This is an operator account. Deleting it will remove the operator's access without affecting the parent account's data.
+          </div>
+          <div v-else class="alert alert-danger py-2 px-3 small mb-0 border-0" style="background: rgba(239, 68, 68, 0.12); color: #fca5a5;">
             <i class="bi bi-exclamation-triangle-fill me-1 text-danger"></i>
             This will permanently erase this user and all <strong>{{ selectedUser.totalRecords }}</strong> associated bond records.
           </div>
@@ -729,85 +831,162 @@ onMounted(() => {
       </div>
     </div>
 
-    <!-- 4. Change User Role Modal -->
+    <!-- 4. Change User Role Modal (Redesigned) -->
     <div v-if="showRoleModal && selectedUser" class="custom-modal-backdrop d-flex align-items-center justify-content-center p-3">
-      <div class="custom-modal-card">
-        <div class="modal-header-cyan p-3 d-flex align-items-center justify-content-between">
+      <div class="custom-modal-card role-modal-card">
+        <!-- Header -->
+        <div class="role-modal-header p-3 d-flex align-items-center justify-content-between">
           <div class="d-flex align-items-center gap-2.5">
-            <div class="modal-icon-wrap icon-cyan rounded">
-              <i class="bi bi-person-gear fs-5"></i>
+            <div class="role-modal-icon-badge">
+              <i class="bi bi-person-gear"></i>
             </div>
             <div>
-              <h6 class="modal-title fw-bold text-white mb-0">Change User Role</h6>
-              <span class="text-muted small">Update role &amp; account permissions</span>
+              <h6 class="role-modal-title mb-0.5">Change User Role</h6>
+              <p class="role-modal-subtitle mb-0">Update account permissions and access tier</p>
             </div>
           </div>
-          <button type="button" class="btn-close btn-close-white" @click="showRoleModal = false"></button>
+          <button type="button" class="role-modal-close-btn" @click="showRoleModal = false">
+            <i class="bi bi-x-lg"></i>
+          </button>
         </div>
 
-        <div class="p-3.5">
-          <div class="user-preview-box p-2.5 rounded mb-3">
-            <div class="fw-semibold text-white">{{ selectedUser.name }}</div>
-            <div class="text-muted small font-monospace">{{ selectedUser.email }}</div>
-            <div class="text-muted small mt-1">
-              Current Role: <strong class="text-info text-uppercase">{{ selectedUser.role }}</strong>
+        <!-- Body -->
+        <div class="role-modal-body p-3.5">
+          <!-- User Banner Preview -->
+          <div class="role-user-banner mb-3">
+            <div class="d-flex align-items-center justify-content-between">
+              <div class="d-flex align-items-center gap-2.5">
+                <div class="role-avatar-circle">
+                  {{ selectedUser.name ? selectedUser.name.charAt(0).toUpperCase() : 'U' }}
+                </div>
+                <div>
+                  <div class="role-user-name">{{ selectedUser.name }}</div>
+                  <div class="role-user-email">
+                    <i class="bi bi-envelope me-1"></i>{{ selectedUser.email }}
+                  </div>
+                </div>
+              </div>
+              <div class="text-end">
+                <div class="role-current-label">CURRENT ROLE</div>
+                <span class="role-current-pill" :class="`pill-${selectedUser.role.toLowerCase()}`">
+                  {{ selectedUser.role.toUpperCase() }}
+                </span>
+              </div>
             </div>
           </div>
 
-          <!-- Select Role Options -->
-          <div class="mb-3">
-            <label class="form-label text-light small fw-medium">Select New Role</label>
-            <div class="d-grid gap-2">
-              <label :class="['role-select-box p-2.5 rounded border d-flex align-items-center justify-content-between cursor-pointer', selectedRole === 'user' ? 'border-primary bg-primary bg-opacity-10' : 'border-secondary border-opacity-25 bg-dark']">
-                <div class="d-flex align-items-center gap-2.5">
-                  <input type="radio" v-model="selectedRole" value="user" class="form-check-input mt-0" />
-                  <div>
-                    <div class="text-white fw-bold small">User (Primary Account)</div>
-                    <div class="text-muted small" style="font-size: 0.74rem;">Can upload data, view reports, and create/manage operators.</div>
-                  </div>
-                </div>
-                <span class="badge bg-primary bg-opacity-25 text-primary">USER</span>
-              </label>
+          <!-- Select Role Options Label -->
+          <label class="role-section-label mb-2">
+            <i class="bi bi-shield-check me-1.5 text-info"></i>
+            <span>Select New Role</span>
+          </label>
 
-              <label :class="['role-select-box p-2.5 rounded border d-flex align-items-center justify-content-between cursor-pointer', selectedRole === 'operator' ? 'border-info bg-info bg-opacity-10' : 'border-secondary border-opacity-25 bg-dark']">
-                <div class="d-flex align-items-center gap-2.5">
-                  <input type="radio" v-model="selectedRole" value="operator" class="form-check-input mt-0" />
-                  <div>
-                    <div class="text-white fw-bold small">Operator (Sub-Account)</div>
-                    <div class="text-muted small" style="font-size: 0.74rem;">Shares data with parent user. Cannot create IDs or manage operators.</div>
+          <!-- Role Cards Container -->
+          <div class="role-cards-container d-flex flex-column gap-2 mb-3">
+            <!-- 1. USER -->
+            <div
+              :class="['role-option-card', { 'is-selected role-user-selected': selectedRole === 'user' }]"
+              @click="selectedRole = 'user'"
+            >
+              <div class="d-flex align-items-center gap-3 flex-grow-1">
+                <div class="role-card-icon-box role-icon-user">
+                  <i class="bi bi-person-fill"></i>
+                </div>
+                <div class="role-card-text">
+                  <div class="role-card-heading">
+                    <span class="role-name">User</span>
+                    <span class="role-tag tag-user">PRIMARY ACCOUNT</span>
+                  </div>
+                  <div class="role-card-desc">
+                    Can upload data, generate reports, and manage operators.
                   </div>
                 </div>
-                <span class="badge bg-info bg-opacity-25 text-info">OPERATOR</span>
-              </label>
+              </div>
+              <div class="custom-radio-circle" :class="{ checked: selectedRole === 'user' }">
+                <div class="radio-core-dot"></div>
+              </div>
+            </div>
 
-              <label :class="['role-select-box p-2.5 rounded border d-flex align-items-center justify-content-between cursor-pointer', selectedRole === 'admin' ? 'border-warning bg-warning bg-opacity-10' : 'border-secondary border-opacity-25 bg-dark']">
-                <div class="d-flex align-items-center gap-2.5">
-                  <input type="radio" v-model="selectedRole" value="admin" class="form-check-input mt-0" />
-                  <div>
-                    <div class="text-white fw-bold small">Admin</div>
-                    <div class="text-muted small" style="font-size: 0.74rem;">Access to administrative users &amp; billing panel.</div>
+            <!-- 2. OPERATOR -->
+            <div
+              :class="['role-option-card', { 'is-selected role-operator-selected': selectedRole === 'operator' }]"
+              @click="selectedRole = 'operator'"
+            >
+              <div class="d-flex align-items-center gap-3 flex-grow-1">
+                <div class="role-card-icon-box role-icon-operator">
+                  <i class="bi bi-person-badge-fill"></i>
+                </div>
+                <div class="role-card-text">
+                  <div class="role-card-heading">
+                    <span class="role-name">Operator</span>
+                    <span class="role-tag tag-operator">SUB-ACCOUNT</span>
+                  </div>
+                  <div class="role-card-desc">
+                    Shares parent user's data &amp; quota. Cannot manage other users.
                   </div>
                 </div>
-                <span class="badge bg-warning bg-opacity-25 text-warning">ADMIN</span>
-              </label>
+              </div>
+              <div class="custom-radio-circle" :class="{ checked: selectedRole === 'operator' }">
+                <div class="radio-core-dot"></div>
+              </div>
+            </div>
 
-              <label :class="['role-select-box p-2.5 rounded border d-flex align-items-center justify-content-between cursor-pointer', selectedRole === 'superadmin' ? 'border-danger bg-danger bg-opacity-10' : 'border-secondary border-opacity-25 bg-dark']">
-                <div class="d-flex align-items-center gap-2.5">
-                  <input type="radio" v-model="selectedRole" value="superadmin" class="form-check-input mt-0" />
-                  <div>
-                    <div class="text-white fw-bold small">Superadmin</div>
-                    <div class="text-muted small" style="font-size: 0.74rem;">Full master control over platform.</div>
+            <!-- 3. ADMIN -->
+            <div
+              :class="['role-option-card', { 'is-selected role-admin-selected': selectedRole === 'admin' }]"
+              @click="selectedRole = 'admin'"
+            >
+              <div class="d-flex align-items-center gap-3 flex-grow-1">
+                <div class="role-card-icon-box role-icon-admin">
+                  <i class="bi bi-shield-lock-fill"></i>
+                </div>
+                <div class="role-card-text">
+                  <div class="role-card-heading">
+                    <span class="role-name">Admin</span>
+                    <span class="role-tag tag-admin">OFFICE ADMIN</span>
+                  </div>
+                  <div class="role-card-desc">
+                    Access to office users, signup approval &amp; billing controls.
                   </div>
                 </div>
-                <span class="badge bg-danger bg-opacity-25 text-danger">SUPERADMIN</span>
-              </label>
+              </div>
+              <div class="custom-radio-circle" :class="{ checked: selectedRole === 'admin' }">
+                <div class="radio-core-dot"></div>
+              </div>
+            </div>
+
+            <!-- 4. SUPERADMIN (Only if current SuperAdmin) -->
+            <div
+              v-if="isCurrentSuperAdmin"
+              :class="['role-option-card', { 'is-selected role-superadmin-selected': selectedRole === 'superadmin' }]"
+              @click="selectedRole = 'superadmin'"
+            >
+              <div class="d-flex align-items-center gap-3 flex-grow-1">
+                <div class="role-card-icon-box role-icon-superadmin">
+                  <i class="bi bi-stars"></i>
+                </div>
+                <div class="role-card-text">
+                  <div class="role-card-heading">
+                    <span class="role-name">Superadmin</span>
+                    <span class="role-tag tag-superadmin">PLATFORM OWNER</span>
+                  </div>
+                  <div class="role-card-desc">
+                    Unlimited platform access, database backup/restore &amp; master control.
+                  </div>
+                </div>
+              </div>
+              <div class="custom-radio-circle" :class="{ checked: selectedRole === 'superadmin' }">
+                <div class="radio-core-dot"></div>
+              </div>
             </div>
           </div>
 
           <!-- If Operator role selected, choose Parent User -->
-          <div v-if="selectedRole === 'operator'" class="mb-3 p-3 rounded bg-dark border border-secondary border-opacity-25">
-            <label class="form-label text-light small fw-medium mb-1">
-              Assign Under Master User <span class="text-danger">*</span>
+          <div v-if="selectedRole === 'operator'" class="operator-parent-select-box p-3 rounded-3 mb-3">
+            <label class="form-label text-light small fw-medium mb-1.5 d-flex align-items-center gap-1.5">
+              <i class="bi bi-diagram-3-fill text-info"></i>
+              <span>Assign Under Master User</span>
+              <span class="text-danger">*</span>
             </label>
             <select v-model="selectedParentAdminId" class="form-select form-select-sm jupiter-input">
               <option :value="null">-- Select Parent Account Owner --</option>
@@ -815,25 +994,100 @@ onMounted(() => {
                 {{ p.name }} ({{ p.email }})
               </option>
             </select>
-            <small class="text-muted d-block mt-1">
+            <div class="text-muted small mt-1.5 font-monospace" style="font-size: 0.72rem;">
+              <i class="bi bi-info-circle me-1"></i>
               The operator will share the database &amp; subscription of the selected master user.
-            </small>
+            </div>
+          </div>
+        </div>
+
+        <!-- Footer -->
+        <div class="role-modal-footer p-3 d-flex align-items-center justify-content-end gap-2.5">
+          <button
+            type="button"
+            class="btn-role-cancel"
+            :disabled="isProcessingAction"
+            @click="showRoleModal = false"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            class="btn-role-submit"
+            :disabled="isProcessingAction || (selectedRole === 'operator' && !selectedParentAdminId)"
+            @click="confirmChangeRole"
+          >
+            <span v-if="isProcessingAction" class="spinner-border spinner-border-sm me-1.5"></span>
+            <i v-else class="bi bi-check-circle-fill me-1.5"></i>
+            <span>Update Role to {{ selectedRole.toUpperCase() }}</span>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 5. Edit Mobile Number Modal -->
+    <div v-if="showPhoneModal && selectedUser" class="custom-modal-backdrop d-flex align-items-center justify-content-center p-3">
+      <div class="custom-modal-card" style="max-width: 440px;">
+        <div class="modal-header-cyan p-3 d-flex align-items-center justify-content-between">
+          <div class="d-flex align-items-center gap-2.5">
+            <div class="modal-icon-wrap icon-cyan rounded">
+              <i class="bi bi-telephone-fill fs-5"></i>
+            </div>
+            <div>
+              <h6 class="modal-title fw-bold text-white mb-0">Update Mobile Number</h6>
+              <span class="text-muted small">Subscription renewal & contact number</span>
+            </div>
+          </div>
+          <button type="button" class="btn-close btn-close-white" @click="showPhoneModal = false"></button>
+        </div>
+
+        <div class="p-3.5">
+          <div class="user-preview-box p-2.5 rounded mb-3">
+            <div class="d-flex align-items-center justify-content-between">
+              <div>
+                <div class="fw-semibold text-white">{{ selectedUser.name }}</div>
+                <div class="text-muted small font-monospace">{{ selectedUser.email }}</div>
+              </div>
+              <span :class="selectedUser.role === 'admin' ? 'badge-role-admin' : 'badge-role-user'">
+                {{ selectedUser.role.toUpperCase() }}
+              </span>
+            </div>
+          </div>
+
+          <div class="mb-3">
+            <label class="form-label text-light small fw-medium">Mobile / Phone Number</label>
+            <div class="input-group">
+              <span class="input-group-text bg-dark border-secondary border-opacity-50 text-warning">
+                <i class="bi bi-telephone"></i>
+              </span>
+              <input
+                v-model="phoneInput"
+                type="tel"
+                class="form-control jupiter-input"
+                placeholder="e.g. 01712345678"
+                autofocus
+                @keydown.enter="confirmUpdatePhone"
+              />
+            </div>
+            <div class="form-text text-muted small mt-1">
+              মেয়াদ শেষ হলে ইউজাররা লগইন করার সময় এই মোবাইল নম্বরটি দেখতে পাবে।
+            </div>
           </div>
         </div>
 
         <div class="p-3 modal-footer-custom d-flex align-items-center justify-content-end gap-2">
-          <button type="button" class="btn btn-secondary btn-sm" :disabled="isProcessingAction" @click="showRoleModal = false">
+          <button type="button" class="btn btn-secondary btn-sm" :disabled="isProcessingAction" @click="showPhoneModal = false">
             Cancel
           </button>
           <button
             type="button"
             class="btn-modal-confirm-cyan"
-            :disabled="isProcessingAction || (selectedRole === 'operator' && !selectedParentAdminId)"
-            @click="confirmChangeRole"
+            :disabled="isProcessingAction"
+            @click="confirmUpdatePhone"
           >
             <span v-if="isProcessingAction" class="spinner-border spinner-border-sm me-1"></span>
             <i v-else class="bi bi-check2-circle me-1"></i>
-            <span>Update Role to {{ selectedRole.toUpperCase() }}</span>
+            <span>Save Number</span>
           </button>
         </div>
       </div>
@@ -1637,5 +1891,361 @@ onMounted(() => {
   100% {
     transform: rotate(360deg);
   }
+}
+
+/* =========================================================
+   Redesigned Role Modal Styles
+   ========================================================= */
+.role-modal-card {
+  max-width: 500px !important;
+  border: 1px solid rgba(255, 255, 255, 0.12) !important;
+  background: #0d131f !important;
+  border-radius: 14px !important;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.85) !important;
+}
+
+.role-modal-header {
+  background: linear-gradient(180deg, rgba(30, 41, 59, 0.5) 0%, rgba(15, 23, 42, 0) 100%);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.role-modal-icon-badge {
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  background: linear-gradient(135deg, rgba(56, 189, 248, 0.2), rgba(99, 102, 241, 0.2));
+  border: 1px solid rgba(56, 189, 248, 0.4);
+  color: #38bdf8;
+  font-size: 1.25rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.role-modal-title {
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: #f8fafc;
+}
+
+.role-modal-subtitle {
+  font-size: 0.76rem;
+  color: #94a3b8;
+}
+
+.role-modal-close-btn {
+  background: transparent;
+  border: none;
+  color: #94a3b8;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.role-modal-close-btn:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: #ffffff;
+}
+
+/* User Banner */
+.role-user-banner {
+  background: linear-gradient(135deg, rgba(15, 23, 42, 0.9), rgba(30, 41, 59, 0.4));
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  padding: 0.85rem 1rem;
+}
+
+.role-avatar-circle {
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  background: linear-gradient(135deg, #0284c7, #6366f1);
+  color: #ffffff;
+  font-weight: 700;
+  font-size: 1rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.role-user-name {
+  font-weight: 700;
+  color: #f8fafc;
+  font-size: 0.95rem;
+}
+
+.role-user-email {
+  font-size: 0.76rem;
+  color: #94a3b8;
+  font-family: monospace;
+}
+
+.role-current-label {
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  color: #64748b;
+  margin-bottom: 2px;
+}
+
+.role-current-pill {
+  font-size: 0.68rem;
+  font-weight: 700;
+  font-family: monospace;
+  padding: 0.18rem 0.55rem;
+  border-radius: 6px;
+  display: inline-block;
+}
+
+.pill-admin {
+  background: rgba(245, 158, 11, 0.15);
+  color: #fbbf24;
+  border: 1px solid rgba(245, 158, 11, 0.35);
+}
+
+.pill-user {
+  background: rgba(59, 130, 246, 0.15);
+  color: #60a5fa;
+  border: 1px solid rgba(59, 130, 246, 0.35);
+}
+
+.pill-superadmin {
+  background: rgba(244, 63, 94, 0.15);
+  color: #fb7185;
+  border: 1px solid rgba(244, 63, 94, 0.35);
+}
+
+.pill-operator {
+  background: rgba(6, 182, 212, 0.15);
+  color: #38bdf8;
+  border: 1px solid rgba(6, 182, 212, 0.35);
+}
+
+.role-section-label {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #cbd5e1;
+  display: flex;
+  align-items: center;
+}
+
+/* Option Cards */
+.role-option-card {
+  background: #111726;
+  border: 1.5px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  padding: 0.7rem 0.95rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  user-select: none;
+}
+
+.role-option-card:hover {
+  background: #151e32;
+  border-color: rgba(255, 255, 255, 0.22);
+  transform: translateY(-1px);
+}
+
+.role-user-selected {
+  background: rgba(59, 130, 246, 0.12) !important;
+  border-color: #3b82f6 !important;
+  box-shadow: 0 0 16px rgba(59, 130, 246, 0.22);
+}
+
+.role-operator-selected {
+  background: rgba(6, 182, 212, 0.12) !important;
+  border-color: #06b6d4 !important;
+  box-shadow: 0 0 16px rgba(6, 182, 212, 0.22);
+}
+
+.role-admin-selected {
+  background: rgba(245, 158, 11, 0.12) !important;
+  border-color: #f59e0b !important;
+  box-shadow: 0 0 16px rgba(245, 158, 11, 0.22);
+}
+
+.role-superadmin-selected {
+  background: rgba(244, 63, 94, 0.12) !important;
+  border-color: #f43f5e !important;
+  box-shadow: 0 0 16px rgba(244, 63, 94, 0.22);
+}
+
+.role-card-icon-box {
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.05rem;
+  flex-shrink: 0;
+}
+
+.role-icon-user {
+  background: rgba(59, 130, 246, 0.15);
+  color: #60a5fa;
+  border: 1px solid rgba(59, 130, 246, 0.3);
+}
+
+.role-icon-operator {
+  background: rgba(6, 182, 212, 0.15);
+  color: #38bdf8;
+  border: 1px solid rgba(6, 182, 212, 0.3);
+}
+
+.role-icon-admin {
+  background: rgba(245, 158, 11, 0.15);
+  color: #fbbf24;
+  border: 1px solid rgba(245, 158, 11, 0.3);
+}
+
+.role-icon-superadmin {
+  background: rgba(244, 63, 94, 0.15);
+  color: #fb7185;
+  border: 1px solid rgba(244, 63, 94, 0.3);
+}
+
+.role-card-heading {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 2px;
+}
+
+.role-name {
+  font-weight: 700;
+  color: #f8fafc;
+  font-size: 0.88rem;
+}
+
+.role-tag {
+  font-size: 0.6rem;
+  font-weight: 700;
+  font-family: monospace;
+  padding: 0.1rem 0.4rem;
+  border-radius: 4px;
+}
+
+.tag-user {
+  background: rgba(59, 130, 246, 0.2);
+  color: #93c5fd;
+}
+
+.tag-operator {
+  background: rgba(6, 182, 212, 0.2);
+  color: #7dd3fc;
+}
+
+.tag-admin {
+  background: rgba(245, 158, 11, 0.2);
+  color: #fde047;
+}
+
+.tag-superadmin {
+  background: rgba(244, 63, 94, 0.2);
+  color: #fda4af;
+}
+
+.role-card-desc {
+  font-size: 0.73rem;
+  color: #94a3b8;
+  line-height: 1.35;
+}
+
+/* Custom Circular Radio */
+.custom-radio-circle {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: 2px solid #475569;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  margin-left: 0.75rem;
+  transition: all 0.2s ease;
+}
+
+.custom-radio-circle.checked {
+  border-color: #38bdf8;
+  background: rgba(56, 189, 248, 0.15);
+}
+
+.radio-core-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #38bdf8;
+  opacity: 0;
+  transform: scale(0.3);
+  transition: all 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.custom-radio-circle.checked .radio-core-dot {
+  opacity: 1;
+  transform: scale(1);
+}
+
+/* Operator parent selector box */
+.operator-parent-select-box {
+  background: #090e17;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+/* Modal Footer */
+.role-modal-footer {
+  background: #090e17;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.btn-role-cancel {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: #cbd5e1;
+  font-size: 0.82rem;
+  font-weight: 600;
+  padding: 0.45rem 1rem;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.btn-role-cancel:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: #ffffff;
+}
+
+.btn-role-submit {
+  background: linear-gradient(135deg, #0284c7, #2563eb);
+  border: 1px solid rgba(56, 189, 248, 0.5);
+  color: #ffffff;
+  font-size: 0.82rem;
+  font-weight: 600;
+  padding: 0.45rem 1.15rem;
+  border-radius: 6px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  box-shadow: 0 4px 12px rgba(2, 132, 199, 0.3);
+  transition: all 0.15s ease;
+}
+
+.btn-role-submit:hover:not(:disabled) {
+  background: linear-gradient(135deg, #0369a1, #1d4ed8);
+  transform: translateY(-1px);
+  box-shadow: 0 6px 16px rgba(2, 132, 199, 0.45);
+}
+
+.btn-role-submit:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 </style>

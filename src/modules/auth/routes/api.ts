@@ -182,6 +182,7 @@ import {
   deleteUser,
   listUsers,
   renewUserBilling,
+  updateUserPhone,
   updateUserRole,
   updateUserStatus
 } from "@/modules/auth/controllers/admin-user.controller.js";
@@ -224,6 +225,7 @@ protectedRoute.post("/admin/users/:id/approve", approveUser);
 protectedRoute.post("/admin/users/:id/renew", renewUserBilling);
 protectedRoute.post("/admin/users/:id/status", updateUserStatus);
 protectedRoute.post("/admin/users/:id/role", updateUserRole);
+protectedRoute.post("/admin/users/:id/phone", updateUserPhone);
 protectedRoute.delete("/admin/users/:id", deleteUser);
 
 export default createRouter().route("/", publicRoute).route("/", protectedRoute);

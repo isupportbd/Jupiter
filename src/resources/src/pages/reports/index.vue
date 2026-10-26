@@ -9,14 +9,19 @@ const authStore = useAuthStore();
 const toast = useToast();
 
 const isSubscriptionExpired = computed(() => {
-  const roleName = String((authStore.user as any)?.role?.name || (authStore.user as any)?.role || "").toLowerCase();
+  const user = authStore.user as any;
+  const roleName = String(user?.role?.name || user?.role || "").toLowerCase();
   const isAdmin = roleName === "superadmin" || roleName === "admin";
   if (isAdmin) return false;
-  return Number((authStore.user as any)?.daysRemaining || 0) <= 0;
+  if (user?.isSubscriptionActive !== undefined) return !user.isSubscriptionActive;
+  return Number(user?.daysRemaining || 0) <= 0;
 });
 
 type TabType = "local_lc" | "all_data" | "monthwise";
 const activeTab = ref<TabType>("local_lc");
+const benLoaded = ref(false);
+const lcLoaded = ref(false);
+const mwLoaded = ref(false);
 
 // Shared Beneficiary Suggestions pool
 const beneficiaryOptions = ref<string[]>([]);
@@ -234,6 +239,7 @@ const fetchBeneficiaryData = async (page = 1) => {
     toast.error(msg);
   } finally {
     benIsLoading.value = false;
+    benLoaded.value = true;
   }
 };
 
@@ -557,6 +563,7 @@ const fetchLocalLcData = async (page = 1) => {
     toast.error(msg);
   } finally {
     lcIsLoading.value = false;
+    lcLoaded.value = true;
   }
 };
 
@@ -896,6 +903,7 @@ const fetchMonthwiseData = async () => {
     toast.error(err.response?.data?.message || err.message || "Failed to load Monthwise summary.");
   } finally {
     mwIsLoading.value = false;
+    mwLoaded.value = true;
   }
 };
 
@@ -1031,11 +1039,11 @@ const exportMwToExcel = async () => {
    ========================================================================= */
 const setActiveTab = (tab: TabType) => {
   activeTab.value = tab;
-  if (tab === "local_lc" && benRecords.value.length === 0) {
+  if (tab === "local_lc" && !benLoaded.value) {
     fetchBeneficiaryData(1);
-  } else if (tab === "all_data" && lcRecords.value.length === 0) {
+  } else if (tab === "all_data" && !lcLoaded.value) {
     fetchLocalLcData(1);
-  } else if (tab === "monthwise" && mwRecords.value.length === 0) {
+  } else if (tab === "monthwise" && !mwLoaded.value) {
     fetchMonthwiseData();
   }
 };

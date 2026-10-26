@@ -9,6 +9,7 @@ export const users = pgTable("users", {
   password: text("password").notNull(),
   roleId: integer("role_id").references(() => roles.id, { onUpdate: "cascade", onDelete: "set null" }),
   adminId: integer("admin_id").references((): any => users.id, { onUpdate: "cascade", onDelete: "cascade" }),
+  phone: varchar("phone", { length: 50 }),
   status: varchar("status", { length: 50 }).default("pending").notNull(), // 'pending' | 'active' | 'suspended' | 'rejected'
   subscriptionExpiresAt: timestamp("subscription_expires_at", { withTimezone: true }),
   billingCycleDays: integer("billing_cycle_days").default(30).notNull(),

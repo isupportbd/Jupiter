@@ -2,7 +2,7 @@ import { config } from "dotenv";
 import { expand } from "dotenv-expand";
 import { z } from "zod";
 
-expand(config({ override: true }));
+expand(config({ override: false }));
 
 const envSchema = z
   .object({
@@ -28,9 +28,9 @@ const envSchema = z
       .string()
       .default("nexgen")
       .transform((value) => value.trim()),
-    JWT_ACCESS_SECRET: z.string().default("idp_jwt_access_secret_key_default_2026"),
-    JWT_REFRESH_SECRET: z.string().default("idp_jwt_refresh_secret_key_default_2026"),
-    COOKIE_SECRET: z.string().default("idp_cookie_secret_key_default_2026"),
+    JWT_ACCESS_SECRET: z.string().min(32, "JWT_ACCESS_SECRET must be at least 32 characters long"),
+    JWT_REFRESH_SECRET: z.string().min(32, "JWT_REFRESH_SECRET must be at least 32 characters long"),
+    COOKIE_SECRET: z.string().min(32, "COOKIE_SECRET must be at least 32 characters long"),
     STORAGE_ACCESS_KEY_ID: z
       .string()
       .optional()
@@ -66,23 +66,24 @@ const envSchema = z
     ADMIN_NAME: z.string().default("Super Admin"),
     OPEN_API: z
       .string()
-      .default("true")
+      .default("false")
       .transform((value) => value.trim().toLowerCase() !== "false" && value.trim() !== "0"),
     SOCKET: z
       .string()
       .default("false")
-      .transform((value) => value.trim().toLowerCase() !== "false" && value.trim() !== "0")
-  })
-  .superRefine((data, ctx) => {
-    for (const key of ["JWT_ACCESS_SECRET", "JWT_REFRESH_SECRET", "COOKIE_SECRET"] as const) {
-      if (!data[key]) {
-        ctx.addIssue({
-          code: "custom",
-          path: [key],
-          message: `${key} is required`
-        });
-      }
-    }
+      .transform((value) => value.trim().toLowerCase() !== "false" && value.trim() !== "0"),
+    SECURITY_HEADERS: z
+      .string()
+      .default("true")
+      .transform((value) => value.trim().toLowerCase() !== "false" && value.trim() !== "0"),
+    AUTH_REQUIRE_EMAIL_VERIFICATION: z
+      .string()
+      .default("false")
+      .transform((value) => value.trim().toLowerCase() === "true" || value.trim() === "1"),
+    AUTH_REQUIRE_LOGIN_OTP: z
+      .string()
+      .default("false")
+      .transform((value) => value.trim().toLowerCase() === "true" || value.trim() === "1")
   });
 
 const parsedEnv = envSchema.parse(process.env);

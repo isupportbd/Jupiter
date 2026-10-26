@@ -2,6 +2,7 @@ import type { Context, Next } from "hono";
 import { eq } from "drizzle-orm";
 import { db } from "@/framework/facade.js";
 import { users } from "@/modules/auth/database/models/user.js";
+import { checkUserSubscriptionStatus } from "@/modules/auth/controllers/auth.helpers.js";
 
 export async function subscriptionMiddleware(c: Context, next: Next) {
   const auth = c.get("auth") as any;
@@ -9,15 +10,16 @@ export async function subscriptionMiddleware(c: Context, next: Next) {
     return await next();
   }
 
-  // SuperAdmin is exempt from subscription restrictions
+  // SuperAdmin is platform owner and always exempt
   const role = String(auth.role || "").toLowerCase();
-  if (role === "superadmin" || role === "admin" || auth.roleId === 1) {
+  if (role === "superadmin") {
     return await next();
   }
 
-  // Exempt read-only HTTP GET, HEAD, OPTIONS requests
+  // Exempt read-only HTTP GET, HEAD, OPTIONS requests UNLESS it is an export request
   const method = c.req.method.toUpperCase();
-  if (method === "GET" || method === "HEAD" || method === "OPTIONS") {
+  const isExport = c.req.query("export") === "true";
+  if ((method === "GET" || method === "HEAD" || method === "OPTIONS") && !isExport) {
     return await next();
   }
 
@@ -30,29 +32,23 @@ export async function subscriptionMiddleware(c: Context, next: Next) {
   try {
     const currentUserId = Number(auth.id);
     const currentUser = await db.query.users.findFirst({
-      where: eq(users.id, currentUserId)
+      where: eq(users.id, currentUserId),
+      with: { role: true, parent: true }
     });
 
-    const targetUserId = currentUser.adminId ? Number(currentUser.adminId) : currentUserId;
-    const effectiveUser = currentUser.adminId
-      ? await db.query.users.findFirst({ where: eq(users.id, targetUserId) })
-      : currentUser;
-
-    if (!effectiveUser) {
+    if (!currentUser) {
       return await next();
     }
 
-    const isSubscriptionActive = !!(
-      effectiveUser.subscriptionExpiresAt &&
-      new Date(effectiveUser.subscriptionExpiresAt).getTime() > Date.now()
-    );
-
-    if (!isSubscriptionActive) {
+    const subCheck = await checkUserSubscriptionStatus(currentUser);
+    if (subCheck.expired) {
       return c.json(
         {
           success: false,
           isSubscriptionExpired: true,
-          message: "Your account subscription has expired. Please contact the Administrator to renew."
+          adminPhone: subCheck.adminPhone || null,
+          adminName: subCheck.adminName || null,
+          message: subCheck.message
         },
         403
       );

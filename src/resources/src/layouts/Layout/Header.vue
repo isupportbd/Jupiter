@@ -57,12 +57,95 @@ const daysRemaining = computed(() => {
   const user = authStore.user as any;
   if (!user) return 0;
   if (isAdmin.value) return 9999;
-  if (user.subscriptionExpiresAt) {
-    const diff = new Date(user.subscriptionExpiresAt).getTime() - Date.now();
+  const expiry = user.subscriptionExpiresAt || user.parent?.subscriptionExpiresAt;
+  if (expiry) {
+    const diff = new Date(expiry).getTime() - Date.now();
     return Math.max(0, Math.ceil(diff / (1000 * 60 * 60 * 24)));
   }
   return Number(user.daysRemaining || 0);
 });
+
+const isSuperAdmin = computed(() => {
+  const roleName = String((authStore.user as any)?.role?.name || (authStore.user as any)?.role || "").toLowerCase();
+  return roleName === "superadmin";
+});
+
+// Database Backup & Restore state
+const isDownloadingBackup = ref(false);
+const isRestoringBackup = ref(false);
+const showRestoreConfirmModal = ref(false);
+const selectedSqlFile = ref<File | null>(null);
+const sqlFileInputRef = ref<HTMLInputElement | null>(null);
+
+const handleDownloadBackup = async () => {
+  if (isDownloadingBackup.value) return;
+  isDownloadingBackup.value = true;
+  try {
+    const token = localStorage.getItem("jupiter_access_token");
+    const res = await axios.get("/api/bond/backup/download", {
+      responseType: "blob",
+      headers: token ? { Authorization: `Bearer ${token}` } : undefined
+    });
+
+    const blob = new Blob([res.data], { type: "application/sql" });
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    const nowStr = new Date().toISOString().replace(/[:.]/g, "-");
+    link.setAttribute("download", `jupiter_backup_${nowStr}.sql`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    window.URL.revokeObjectURL(url);
+  } catch (err: any) {
+    console.error("Backup download error:", err);
+    alert(err.response?.data?.message || "Failed to download database backup.");
+  } finally {
+    isDownloadingBackup.value = false;
+  }
+};
+
+const triggerSqlFileInput = () => {
+  if (sqlFileInputRef.value) {
+    sqlFileInputRef.value.value = "";
+    sqlFileInputRef.value.click();
+  }
+};
+
+const handleSqlFileSelected = (e: Event) => {
+  const target = e.target as HTMLInputElement;
+  if (target.files && target.files[0]) {
+    selectedSqlFile.value = target.files[0];
+    showRestoreConfirmModal.value = true;
+  }
+};
+
+const confirmRestoreBackup = async () => {
+  if (!selectedSqlFile.value) return;
+  isRestoringBackup.value = true;
+  try {
+    const formData = new FormData();
+    formData.append("file", selectedSqlFile.value);
+    const token = localStorage.getItem("jupiter_access_token");
+    const res = await axios.post("/api/bond/backup/restore", formData, {
+      headers: {
+        "Content-Type": "multipart/form-data",
+        ...(token ? { Authorization: `Bearer ${token}` } : {})
+      }
+    });
+
+    showRestoreConfirmModal.value = false;
+    selectedSqlFile.value = null;
+    alert(res.data?.message || "Database successfully restored from SQL backup file!");
+    await fetchStorageSize();
+    window.location.reload();
+  } catch (err: any) {
+    console.error("Restore error:", err);
+    alert(err.response?.data?.message || "Failed to restore database from SQL backup file.");
+  } finally {
+    isRestoringBackup.value = false;
+  }
+};
 
 const handleLogout = async () => {
   isDropdownOpen.value = false;
@@ -119,6 +202,44 @@ const handleLogout = async () => {
             </span>
           </div>
         </div>
+
+        <!-- SuperAdmin Database Backup & Restore Buttons -->
+        <template v-if="isSuperAdmin">
+          <!-- Download Backup Button -->
+          <button
+            type="button"
+            class="btn-header-backup btn-backup-download font-monospace"
+            :disabled="isDownloadingBackup"
+            title="Download SQL Database Backup"
+            @click="handleDownloadBackup"
+          >
+            <span v-if="isDownloadingBackup" class="spinner-border spinner-border-sm me-1" role="status"></span>
+            <i v-else class="bi bi-download me-1"></i>
+            <span>Backup</span>
+          </button>
+
+          <!-- Upload / Restore Backup Button -->
+          <button
+            type="button"
+            class="btn-header-backup btn-backup-upload font-monospace"
+            :disabled="isRestoringBackup"
+            title="Upload and Restore Database from SQL Backup"
+            @click="triggerSqlFileInput"
+          >
+            <span v-if="isRestoringBackup" class="spinner-border spinner-border-sm me-1" role="status"></span>
+            <i v-else class="bi bi-upload me-1"></i>
+            <span>Restore</span>
+          </button>
+
+          <!-- Hidden Native File Input for SQL -->
+          <input
+            ref="sqlFileInputRef"
+            type="file"
+            accept=".sql"
+            class="d-none"
+            @change="handleSqlFileSelected"
+          />
+        </template>
 
         <!-- Subscription Days Remaining Badge -->
         <div v-if="!isAdmin && authStore.isAuthenticated" class="d-flex align-items-center">
@@ -200,6 +321,61 @@ const handleLogout = async () => {
         </div>
       </div>
     </div>
+
+    <!-- Restore Confirmation Modal -->
+    <div
+      v-if="showRestoreConfirmModal && selectedSqlFile"
+      class="custom-modal-backdrop d-flex align-items-center justify-content-center p-3"
+      style="position: fixed; inset: 0; background: rgba(0, 0, 0, 0.75); z-index: 2000; backdrop-filter: blur(4px);"
+    >
+      <div class="custom-modal-card rounded shadow-lg overflow-hidden" style="background: #111827; border: 1px solid #374151; max-width: 460px; width: 100%;">
+        <div class="p-3 d-flex align-items-center justify-content-between" style="background: rgba(168, 85, 247, 0.15); border-bottom: 1px solid rgba(168, 85, 247, 0.3);">
+          <div class="d-flex align-items-center gap-2">
+            <i class="bi bi-database-up fs-5 text-warning"></i>
+            <h6 class="modal-title fw-bold text-white mb-0">Confirm Database Restore</h6>
+          </div>
+          <button type="button" class="btn-close btn-close-white" @click="showRestoreConfirmModal = false"></button>
+        </div>
+
+        <div class="p-3.5">
+          <div class="p-3 rounded mb-3" style="background: #1f2937; border: 1px solid #374151;">
+            <div class="text-white fw-semibold text-truncate mb-1">
+              <i class="bi bi-filetype-sql text-info me-1"></i>
+              {{ selectedSqlFile.name }}
+            </div>
+            <div class="text-muted small font-monospace">
+              Size: {{ (selectedSqlFile.size / 1024).toFixed(1) }} KB
+            </div>
+          </div>
+
+          <div class="alert alert-warning py-2 px-3 small font-monospace mb-0" style="background: rgba(245, 158, 11, 0.12); border: 1px solid rgba(245, 158, 11, 0.3); color: #fbbf24;">
+            <i class="bi bi-exclamation-triangle-fill me-1"></i>
+            <strong>Warning:</strong> Restoring this SQL file will execute all statements and update/replace database tables and records.
+          </div>
+        </div>
+
+        <div class="p-3 d-flex align-items-center justify-content-end gap-2" style="background: #0f172a; border-top: 1px solid #1f2937;">
+          <button
+            type="button"
+            class="btn btn-secondary btn-sm"
+            :disabled="isRestoringBackup"
+            @click="showRestoreConfirmModal = false; selectedSqlFile = null;"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            class="btn btn-warning btn-sm fw-semibold"
+            :disabled="isRestoringBackup"
+            @click="confirmRestoreBackup"
+          >
+            <span v-if="isRestoringBackup" class="spinner-border spinner-border-sm me-1" role="status"></span>
+            <i v-else class="bi bi-upload me-1"></i>
+            <span>{{ isRestoringBackup ? 'Restoring SQL...' : 'Confirm Restore' }}</span>
+          </button>
+        </div>
+      </div>
+    </div>
   </header>
 </template>
 
@@ -242,6 +418,55 @@ const handleLogout = async () => {
   background: rgba(14, 165, 233, 0.18);
   border-color: rgba(56, 189, 248, 0.55);
   box-shadow: 0 0 12px rgba(56, 189, 248, 0.25);
+}
+
+.btn-header-backup {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 5px 13px;
+  border-radius: 9999px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  line-height: 1.2;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+  outline: none;
+}
+
+.btn-backup-download {
+  background: rgba(16, 185, 129, 0.12);
+  border: 1px solid rgba(16, 185, 129, 0.4);
+  color: #34d399;
+}
+
+.btn-backup-download:hover:not(:disabled) {
+  background: rgba(16, 185, 129, 0.24);
+  border-color: rgba(52, 211, 153, 0.65);
+  color: #6ee7b7;
+  box-shadow: 0 0 12px rgba(16, 185, 129, 0.3);
+  transform: translateY(-1px);
+}
+
+.btn-backup-upload {
+  background: rgba(168, 85, 247, 0.12);
+  border: 1px solid rgba(168, 85, 247, 0.4);
+  color: #c084fc;
+}
+
+.btn-backup-upload:hover:not(:disabled) {
+  background: rgba(168, 85, 247, 0.24);
+  border-color: rgba(192, 132, 252, 0.65);
+  color: #e9d5ff;
+  box-shadow: 0 0 12px rgba(168, 85, 247, 0.3);
+  transform: translateY(-1px);
+}
+
+.btn-header-backup:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none;
 }
 
 .text-cyan {

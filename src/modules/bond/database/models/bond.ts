@@ -61,6 +61,9 @@ export const bondRecords = pgTable(
     cancelCause: text("cancel_cause"),
     entryDate: timestamp("entry_date", { withTimezone: true }),
 
+    // Deterministic 31-column Full Row Hash for 100% accurate deduplication
+    recordHash: text("record_hash"),
+
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull()
   }

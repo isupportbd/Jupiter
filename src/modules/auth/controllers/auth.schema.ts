@@ -15,6 +15,7 @@ export const UserSchema = z.object({
   id: z.number(),
   name: z.string(),
   email: z.email(),
+  phone: z.string().nullable().optional(),
   roleId: z.number().nullable().optional(),
   role: RoleSchema.nullable().optional(),
   emailVerifiedAt: z.string().nullable().optional(),
@@ -26,8 +27,10 @@ export const RegisterSchema = z
   .object({
     name: z.string().min(2).max(100),
     email: z.email(),
+    phone: z.string().max(50).optional().nullable(),
     password: z.string().min(6, "Password must be at least 6 characters").max(100),
-    password_confirmation: z.string()
+    password_confirmation: z.string(),
+    role: z.enum(["user", "admin"]).optional().default("user")
   })
   .superRefine((data, ctx) => {
     if (data.password !== data.password_confirmation) {
@@ -87,11 +90,16 @@ export const RefreshTokenSchema = z.object({
   refresh_token: z.string().min(1)
 });
 
-export const VerifyEmailSchema = z.object({
-  email: z.email(),
-  token: z.string().optional(),
-  otp: z.string().optional()
-});
+export const VerifyEmailSchema = z
+  .object({
+    email: z.email(),
+    token: z.string().optional(),
+    otp: z.string().optional()
+  })
+  .refine((data) => Boolean(data.otp || data.token), {
+    message: "Either OTP or verification token is required",
+    path: ["otp"]
+  });
 
 export const AuthResponseSchema = z.object({
   message: z.string(),
