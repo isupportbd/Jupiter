@@ -1,4 +1,4 @@
-import { and, desc, eq, ilike, or, sql } from "drizzle-orm";
+import { and, desc, eq, ilike, ne, or, sql } from "drizzle-orm";
 import type { Handler } from "hono";
 import { db, HttpStatusCodes } from "@/framework/facade.js";
 import { roles } from "@/modules/auth/database/models/role.js";
@@ -550,9 +550,9 @@ export const updateUserRole: Handler = async (c: any) => {
     let selfDemoted = false;
     let responseMessage = `Role for "${targetUser.name}" successfully changed to "${roleName}".`;
 
-    // If an Admin (not SuperAdmin) sets another user as Admin,
-    // they automatically transfer the admin role and become a regular user
-    if (roleName === "admin" && !isSuperAdmin) {
+    // Strict Rule: Exactly ONE Admin in the system at any given time.
+    // If any user is promoted to Admin, any existing Admin is automatically converted to 'user'.
+    if (roleName === "admin" && roleRecord) {
       let userRoleRecord = await db.query.roles.findFirst({
         where: eq(roles.name, "user")
       });
@@ -565,12 +565,29 @@ export const updateUserRole: Handler = async (c: any) => {
         }
       }
       if (userRoleRecord) {
-        await db
-          .update(users)
-          .set({ roleId: userRoleRecord.id, updatedAt: new Date() })
-          .where(eq(users.id, Number(auth.id)));
-        selfDemoted = true;
-        responseMessage = `Admin role successfully transferred to "${targetUser.name}". Your account has been converted to User role.`;
+        const otherAdmins = await db.query.users.findMany({
+          where: and(
+            eq(users.roleId, roleRecord.id),
+            ne(users.id, userId)
+          )
+        });
+
+        for (const prevAdmin of otherAdmins) {
+          await db
+            .update(users)
+            .set({ roleId: userRoleRecord.id, updatedAt: new Date() })
+            .where(eq(users.id, prevAdmin.id));
+
+          if (Number(auth.id) === prevAdmin.id) {
+            selfDemoted = true;
+          }
+        }
+
+        if (selfDemoted) {
+          responseMessage = `Admin role successfully transferred to "${targetUser.name}". Your account has been converted to User role.`;
+        } else if (otherAdmins.length > 0) {
+          responseMessage = `"${targetUser.name}" is now the sole Office Admin. Previous Admin has been converted to User role.`;
+        }
       }
     }
 
