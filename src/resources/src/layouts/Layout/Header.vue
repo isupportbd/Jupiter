@@ -290,7 +290,7 @@ const handleLogout = async () => {
                 @click="isDropdownOpen = false"
               >
                 <i class="bi bi-speedometer2 text-info"></i>
-                <span>ইউজার প্যানেল (User Panel)</span>
+                <span>User Panel</span>
               </router-link>
 
               <router-link
@@ -300,7 +300,7 @@ const handleLogout = async () => {
                 @click="isDropdownOpen = false"
               >
                 <i class="bi bi-shield-shaded text-warning"></i>
-                <span>এডমিন প্যানেল (Admin Panel)</span>
+                <span>Admin Panel</span>
               </router-link>
 
               <div class="user-card-divider"></div>

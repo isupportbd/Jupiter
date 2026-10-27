@@ -94,11 +94,6 @@ router.beforeEach(async (to: RouteLocationNormalized) => {
     return { path: "/login", query };
   }
 
-  // Admin should NOT access user pages (Dashboard or Reports) - only /users
-  if (isAuthenticated && isAdmin && (to.path === "/" || to.path.startsWith("/reports"))) {
-    return { path: "/users" };
-  }
-
   // Regular user should NOT access /users (Admin only)
   if (isAuthenticated && !isAdmin && to.path.startsWith("/users")) {
     return { path: "/" };
